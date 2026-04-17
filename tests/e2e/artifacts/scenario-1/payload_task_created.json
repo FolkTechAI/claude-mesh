@@ -1,0 +1,6 @@
+{
+  "team_name": "hackathon",
+  "teammate_name": "backend",
+  "task_id": "TASK-042",
+  "task_subject": "Update frontend token storage to handle rotating JWT"
+}

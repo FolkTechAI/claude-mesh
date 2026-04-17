@@ -1,0 +1,36 @@
+@ftai v2.0
+@document
+title: Claude Mesh knowledge log — hackathon
+author: claude-mesh skill
+schema: claude_mesh_v1
+
+@schema
+name: claude_mesh_v1
+required_tags: ["@document", "@channel"]
+optional_tags: ["@message", "@file_change", "@task", "@decision", "@note"]
+@end
+
+@channel
+participants: [backend]
+purpose: Persistent shared knowledge between Claude Code sessions
+
+@file_change
+from: backend
+timestamp: 2026-04-17T23:16:23Z
+path: src/api/auth.rs
+tool: Edit
+summary: (no git summary available)
+
+@message
+from: backend
+timestamp: 2026-04-17T23:16:23Z
+body: Completed the JWT refresh rotation implementation in src/api/auth.rs. The token now rotates on every successful use and old tokens are blacklisted in Redis. This change affects the authentication flow across all endpoints — frontend will need to update token storage logic to capture the new token from response headers.
+
+@task
+id: TASK-042
+from: backend
+timestamp: 2026-04-17T23:16:23Z
+subject: Update frontend token storage to handle rotating JWT
+status: pending
+@end
+

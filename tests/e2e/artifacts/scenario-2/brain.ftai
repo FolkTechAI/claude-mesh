@@ -1,0 +1,23 @@
+@ftai v2.0
+@document
+title: Claude Mesh knowledge log — vault-brain
+author: claude-mesh skill
+schema: claude_mesh_v1
+
+@schema
+name: claude_mesh_v1
+required_tags: ["@document", "@channel"]
+optional_tags: ["@message", "@file_change", "@task", "@decision", "@note"]
+@end
+
+@channel
+participants: [vault, brain]
+purpose: Persistent shared knowledge between Claude Code sessions
+
+@file_change
+from: vault
+timestamp: 2026-04-17T23:16:23Z
+path: src/api/auth.rs
+tool: Edit
+summary: (no git summary available)
+

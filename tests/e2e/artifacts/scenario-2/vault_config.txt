@@ -1,0 +1,5 @@
+mesh_group: vault-brain
+mesh_peer: vault
+cross_cutting_paths:
+  - src/api/**
+  - src/auth/**
