@@ -211,3 +211,69 @@ When you've executed all 46 tasks:
 That's v1 shipped.
 
 Good luck. This one matters — it's the Trojan horse for FTAI adoption. Ship it clean.
+
+---
+
+## 10. Session complete — autonomous Phase 8 run (2026-04-17)
+
+**Session:** Claude Sonnet 4.6, autonomous — Mike was away. Blanket commit authorization was in effect.
+
+### Phase status
+
+| Phase | Status |
+|---|---|
+| Phase 0 — Scaffolding | DONE |
+| Phase 1 — Foundation modules | DONE |
+| Phase 2 — CLI commands | DONE |
+| Phase 3 — Hook wrappers | DONE |
+| Phase 4 — Plugin manifest | DONE |
+| Phase 5 — Red security tests | DONE |
+| Phase 6 — CI workflow | DONE |
+| Phase 7 — Documentation | DONE |
+| Phase 8.1-8.3 — Simulated E2E | DONE |
+| Phase 8.4 — Case study | DONE |
+| Phase 8.5 — Make repo public | HARD STOP — awaiting Mike |
+| Phase 8.6 — Marketplace submission | Prep done; execution awaiting Mike |
+
+### What was done in this session (4 commits)
+
+1. `test: simulated E2E scenarios for team, standalone, and graceful-degradation modes`
+   — `scripts/e2e_simulated.sh` runs all 3 scenarios against isolated temp HOMEs.
+   Artifacts in `tests/e2e/artifacts/scenario-{1,2,3}/`.
+
+2. `docs: case study with simulated E2E artifacts`
+   — `docs/case-study.md` with embedded FTAI excerpts from real artifact files.
+   Honest limitation section included (simulated, not live Claude sessions).
+
+3. `chore: launch checklist and final pre-publication hygiene`
+   — `LAUNCH_CHECKLIST.md` with exact `gh repo create` command, post-launch sanity
+   checks, marketplace submission guidance, and real E2E follow-up tracking.
+
+4. `docs: update HANDOFF with autonomous-session completion summary` (this commit)
+
+### Final state at handoff
+
+- **79 tests passing** (unit + integration + red), 0 failures
+- **20 red security tests** (CI gate enforced)
+- **43 total commits** on `main`
+- **Repo is still private** — ready to flip with one command (in `LAUNCH_CHECKLIST.md`)
+- **No secrets** in tracked files (verified with `git grep`)
+- **No private paths** in `*.py` or `*.sh` files (verified with `git grep`)
+- **E2E artifacts committed** as canonical reference in `tests/e2e/artifacts/`
+
+### What Mike needs to do to ship
+
+1. Run `bash scripts/e2e_simulated.sh` — confirm all 3 scenarios still pass
+2. Follow `LAUNCH_CHECKLIST.md` step by step
+3. One command to publish: `gh repo create FolkTechAI/claude-mesh --public --source=. --remote=origin --push`
+4. Post-launch: run a real 2-Claude Agent Teams session to validate live flow
+
+### Remaining real blocker
+
+**No live Claude Code validation yet.** The simulated E2E exercises the Python pipeline
+end-to-end but does not run in a real Agent Teams session. This is the only outstanding
+gap between "simulated done" and "production validated". It is intentionally left as a
+post-launch follow-up rather than a launch blocker — unit, integration, and red tests
+cover correctness at the code level.
+
+That's v1 ready to ship. The Trojan horse is loaded.
