@@ -1,0 +1,41 @@
+{
+  "name": "claude-mesh",
+  "version": "0.1.0",
+  "description": "FTAI-structured shared knowledge between Claude Code sessions. Works standalone or with Agent Teams.",
+  "author": "FolkTech AI LLC",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/FolkTechAI/claude-mesh",
+  "hooks": {
+    "SessionStart": [{"matcher": "", "hooks": [
+      {"type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session_start.sh"}
+    ]}],
+    "UserPromptSubmit": [{"matcher": "", "hooks": [
+      {"type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/user_prompt_submit.sh"}
+    ]}],
+    "PostToolUse": [
+      {"matcher": "Edit|Write|NotebookEdit", "hooks": [
+        {"type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/post_tool_use_edit.sh"}
+      ]},
+      {"matcher": "TeamCreate", "hooks": [
+        {"type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/post_tool_use_team.sh"}
+      ]}
+    ],
+    "TaskCreated": [{"matcher": "", "hooks": [
+      {"type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/task_created.sh"}
+    ]}],
+    "TaskCompleted": [{"matcher": "", "hooks": [
+      {"type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/task_completed.sh"}
+    ]}],
+    "SubagentStop": [{"matcher": "", "hooks": [
+      {"type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/subagent_stop.sh"}
+    ]}],
+    "TeammateIdle": [{"matcher": "", "hooks": [
+      {"type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/teammate_idle.sh"}
+    ]}]
+  },
+  "commands": [
+    {"name": "mesh-init", "file": "commands/mesh-init.md"},
+    {"name": "mesh-publish", "file": "commands/mesh-publish.md"},
+    {"name": "mesh-check-inbox", "file": "commands/mesh-check-inbox.md"}
+  ]
+}
