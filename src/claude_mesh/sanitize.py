@@ -52,7 +52,7 @@ class SensitiveDataFilter:
         (re.compile(r"(?i)(api[_-]?key\s*[=:]\s*)([A-Za-z0-9_-]{16,})"), r"\1[REDACTED]"),
         (re.compile(r"(?i)(password\s*[=:]\s*)(\S+)"), r"\1[REDACTED]"),
         (re.compile(r"(?i)(bearer\s+)([A-Za-z0-9_.\-]{8,})"), r"\1[REDACTED]"),
-        (re.compile(r"(sk-[A-Za-z0-9]{20,})"), "[REDACTED]"),
+        (re.compile(r"(sk-[A-Za-z0-9][A-Za-z0-9-]{15,})"), "[REDACTED]"),
         (re.compile(r"\b[A-Za-z0-9]{32,}\b"), "[REDACTED-HIGH-ENTROPY]"),
     ]
 
