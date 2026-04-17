@@ -1,6 +1,7 @@
 #!/bin/bash
 # hooks/post_tool_use_edit.sh
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=_common.sh
 source "${SCRIPT_DIR}/_common.sh"
 
 PAYLOAD="$(cat)"
@@ -27,7 +28,7 @@ fi
 
 # Convert absolute path to relative if possible
 if [[ "${FILE_PATH}" = /* ]]; then
-    FILE_PATH="${FILE_PATH#${PWD}/}"
+    FILE_PATH="${FILE_PATH#"${PWD}"/}"
 fi
 
 echo "${PAYLOAD}" | python3.11 -m claude_mesh notify-change "${FILE_PATH}" "${TOOL}" 2>>"${_log_dir}" || true

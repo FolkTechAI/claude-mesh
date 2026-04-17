@@ -1,6 +1,7 @@
 #!/bin/bash
 # hooks/user_prompt_submit.sh
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=_common.sh
 source "${SCRIPT_DIR}/_common.sh"
 
 # Read the full hook payload from stdin once

@@ -1,4 +1,5 @@
 # hooks/_common.sh
+# shellcheck shell=bash
 # Common helpers for all claude-mesh hook wrappers.
 # Source this file; do not execute directly.
 set -eu

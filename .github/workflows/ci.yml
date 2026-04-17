@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.11", "3.12"]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install package
+        run: pip install -e .
+      - name: Install dev tools
+        run: pip install ruff mypy pytest
+      - name: Install shellcheck (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y shellcheck
+      - name: Install shellcheck (macOS)
+        if: runner.os == 'macOS'
+        run: brew install shellcheck || true
+      - name: Ruff lint
+        run: ruff check src/ tests/
+      - name: Mypy
+        run: mypy src/ || true  # strict mode; soft-fail in CI until we tighten
+      - name: Shellcheck hooks
+        run: shellcheck --source-path=hooks -x hooks/*.sh
+      - name: Pytest
+        run: pytest tests/ -v
+
+  red-test-count:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Count red tests
+        id: count
+        run: |
+          count_pr=$(grep -rhc "^def test_" tests/red/ 2>/dev/null | awk '{s+=$1} END {print s+0}')
+          echo "count_pr=${count_pr}" >> "$GITHUB_OUTPUT"
+          echo "Current red test count: ${count_pr}"
+          if [ "${count_pr}" -lt 20 ]; then
+            echo "::error::Red test count ${count_pr} below v1 floor of 20"
+            exit 1
+          fi
+      - name: Red test count didn't decrease vs main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          git fetch origin main:main || true
+          count_main=0
+          for f in $(git ls-tree -r main --name-only 2>/dev/null | grep '^tests/red/.*\.py$' || true); do
+            n=$(git show "main:${f}" 2>/dev/null | grep -c "^def test_" || true)
+            count_main=$((count_main + n))
+          done
+          count_pr="${{ steps.count.outputs.count_pr }}"
+          if [ "${count_pr}" -lt "${count_main}" ]; then
+            echo "::error::Red test count decreased: ${count_main} -> ${count_pr}"
+            exit 1
+          fi
