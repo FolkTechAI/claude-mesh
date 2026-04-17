@@ -37,6 +37,17 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("mark-read", help="Advance the last-read marker to now")
     sub.add_parser("doctor", help="Run diagnostic checks")
 
+    p_task = sub.add_parser("task-event", help="Append a @task event to the peer knowledge file")
+    p_task.add_argument("--id", dest="task_id", type=str, required=True, help="Task ID")
+    p_task.add_argument("--subject", type=str, required=True, help="Task subject/title")
+    p_task.add_argument(
+        "--status", type=str, required=True,
+        choices=["pending", "in-progress", "completed", "cancelled"],
+        help="Task status",
+    )
+
+    sub.add_parser("subagent-turn", help="Auto-log a teammate turn summary from SubagentStop")
+
     return parser
 
 
@@ -66,6 +77,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "doctor":
         from claude_mesh.commands.doctor import run as run_doctor
         return run_doctor()
+    if args.command == "task-event":
+        from claude_mesh.commands.task_event import run as run_task_event
+        return run_task_event(task_id=args.task_id, subject=args.subject, status=args.status)
+    if args.command == "subagent-turn":
+        from claude_mesh.commands.subagent_turn import run as run_subagent_turn
+        return run_subagent_turn()
 
     parser.print_help()
     return 2
