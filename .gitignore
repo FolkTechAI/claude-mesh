@@ -13,3 +13,7 @@ venv/
 # Knowledge files produced during local testing — never commit:
 /test-output/
 **/.claude-mesh/groups/**
+# E2E artifacts ARE committed as canonical reference (see tests/e2e/artifacts/README.md).
+# Do NOT add tests/e2e/artifacts/ to this ignore list.
+# Payload fixtures in scenario dirs are committed as-is.
+
