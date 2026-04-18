@@ -55,24 +55,23 @@ def notify_change(
         if cfg.cross_cutting_paths and not path_matches_any_glob(path, cfg.cross_cutting_paths):
             return 0  # not cross-cutting
         # In standalone pairs v1, write to THE OTHER peer's inbox.
-        # v1 simplification: if there are exactly 2 peers, the other peer's name is inferred
-        # from the group name pattern "{peer_a}-{peer_b}"; otherwise require an explicit peers list
-        # in config (deferred to v2).
-        parts = cfg.mesh_group.split("-")
-        if len(parts) != 2 or cfg.mesh_peer not in parts:
+        # Resolution: explicit mesh_peers list > prefix/suffix match on group name.
+        other = cfg.other_peer()
+        if other is None:
             print(
-                "claude-mesh notify-change: cannot infer peer from group name; "
-                f"group={cfg.mesh_group!r} must follow {{peer_a}}-{{peer_b}} convention",
+                "claude-mesh notify-change: cannot infer the other peer; "
+                f"set `mesh_peers: [{cfg.mesh_peer}, <other>]` in .claude-mesh, "
+                f"or rename the group so it starts or ends with {cfg.mesh_peer!r} "
+                "(e.g. 'alpha-beta' when mesh_peer is 'alpha').",
                 file=sys.stderr,
             )
             return 0
-        other = parts[0] if parts[1] == cfg.mesh_peer else parts[1]
         target_path = resolve_knowledge_path(
             mode, hook_payload, config=cfg, home=home, writing_to_peer=other
         )
         from_ = cfg.mesh_peer
         group_or_team = cfg.mesh_group
-        participants = parts
+        participants = cfg.mesh_peers or [cfg.mesh_peer, other]
     else:
         target_path = resolve_knowledge_path(mode, hook_payload, config=None, home=home)
         from_ = str(hook_payload.get("teammate_name", "unknown"))

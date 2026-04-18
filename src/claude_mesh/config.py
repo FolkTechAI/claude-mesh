@@ -25,7 +25,31 @@ class MeshConfig:
     mesh_group: str
     mesh_peer: str
     cross_cutting_paths: list[str] = field(default_factory=list)
+    mesh_peers: list[str] = field(default_factory=list)
     source_path: Path | None = None
+
+    def other_peer(self) -> str | None:
+        """Return the opposite peer name for two-peer standalone mode, or None if ambiguous.
+
+        Resolution order:
+          1. If mesh_peers is an explicit 2-element list, pick the one that isn't mesh_peer.
+          2. Otherwise try group = '{mesh_peer}-{other}' (prefix match).
+          3. Otherwise try group = '{other}-{mesh_peer}' (suffix match).
+          4. Otherwise give up (ambiguous — caller should require explicit mesh_peers).
+        """
+        if self.mesh_peers:
+            if len(self.mesh_peers) == 2 and self.mesh_peer in self.mesh_peers:
+                a, b = self.mesh_peers
+                return b if a == self.mesh_peer else a
+            return None
+
+        prefix = self.mesh_peer + "-"
+        suffix = "-" + self.mesh_peer
+        if self.mesh_group.startswith(prefix):
+            return self.mesh_group[len(prefix):]
+        if self.mesh_group.endswith(suffix):
+            return self.mesh_group[: -len(suffix)]
+        return None
 
 
 def _parse_minimal_yaml(text: str) -> dict[str, object]:
@@ -117,8 +141,28 @@ def load_config(path: Path) -> MeshConfig:
             )
         paths.append(s)
 
+    peers_raw = parsed.get("mesh_peers", [])
+    if not isinstance(peers_raw, list):
+        raise ConfigError("mesh_peers must be a list")
+    peers: list[str] = []
+    for p in peers_raw:
+        s = str(p)
+        if not NAME_PATTERN.match(s):
+            raise ConfigError(
+                f"mesh_peers entry {s!r} has invalid characters; only [a-z0-9-] allowed"
+            )
+        peers.append(s)
+    if peers and peer not in peers:
+        raise ConfigError(
+            f"mesh_peer {peer!r} must appear in mesh_peers {peers!r}"
+        )
+
     return MeshConfig(
-        mesh_group=group, mesh_peer=peer, cross_cutting_paths=paths, source_path=path
+        mesh_group=group,
+        mesh_peer=peer,
+        cross_cutting_paths=paths,
+        mesh_peers=peers,
+        source_path=path,
     )
 
 

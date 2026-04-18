@@ -18,13 +18,20 @@ Claude Mesh fixes this. It hooks into Claude Code's event system to maintain a p
 
 ## Install
 
-```bash
-claude plugin add FolkTechAI/claude-mesh
+From inside a Claude Code session:
+
+```
+/plugin marketplace add FolkTechAI/claude-mesh
+/plugin install claude-mesh@folktechai
 ```
 
-No other dependencies. The plugin ships with a vendored FTAI parser and uses Python stdlib only.
+Or one-liner from the shell:
 
-> Note: the repo at `github.com/FolkTechAI/claude-mesh` is pending public release. This install command will work after launch.
+```bash
+claude plugin marketplace add FolkTechAI/claude-mesh && claude plugin install claude-mesh@folktechai
+```
+
+No other dependencies. The plugin ships with a vendored FTAI parser and uses Python stdlib only (Python 3.9+).
 
 ---
 
@@ -35,21 +42,30 @@ No other dependencies. The plugin ships with a vendored FTAI parser and uses Pyt
 2. In each of two paired project directories, initialize the mesh:
 
    ```bash
-   claude-mesh init
-   # or from inside a Claude session: /mesh-init
+   # in the backend project:
+   claude-mesh init --peer backend --other frontend
+
+   # in the frontend project:
+   claude-mesh init --peer frontend --other backend
+
+   # or, from inside a Claude Code session: /mesh-init
    ```
 
    Example config written to `.claude-mesh`:
 
    ```yaml
-   mesh_group: frontend-backend
+   mesh_group: backend-frontend
    mesh_peer: backend
+   mesh_peers:
+     - backend
+     - frontend
    cross_cutting_paths:
      - src/api/**
      - src/shared/**
    ```
 
-   Do the same in the second project with `mesh_peer: frontend`.
+   Peer names may contain hyphens (e.g. `my-project`). The `mesh_peers` list is
+   authoritative; the group name is a human-readable label.
 
 3. Open two terminals. Start `claude` in each project directory.
 
