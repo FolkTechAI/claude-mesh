@@ -2,9 +2,14 @@
   "name": "claude-mesh",
   "version": "0.1.0",
   "description": "FTAI-structured shared knowledge between Claude Code sessions. Works standalone or with Agent Teams.",
-  "author": "FolkTech AI LLC",
+  "author": {
+    "name": "FolkTech AI LLC",
+    "url": "https://github.com/FolkTechAI"
+  },
   "license": "Apache-2.0",
   "homepage": "https://github.com/FolkTechAI/claude-mesh",
+  "repository": "https://github.com/FolkTechAI/claude-mesh",
+  "keywords": ["claude-code", "agent-teams", "ftai", "multi-agent", "coordination"],
   "hooks": {
     "SessionStart": [{"matcher": "", "hooks": [
       {"type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session_start.sh"}
@@ -32,10 +37,5 @@
     "TeammateIdle": [{"matcher": "", "hooks": [
       {"type": "command", "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/teammate_idle.sh"}
     ]}]
-  },
-  "commands": [
-    {"name": "mesh-init", "file": "commands/mesh-init.md"},
-    {"name": "mesh-publish", "file": "commands/mesh-publish.md"},
-    {"name": "mesh-check-inbox", "file": "commands/mesh-check-inbox.md"}
-  ]
+  }
 }
