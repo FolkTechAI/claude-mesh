@@ -18,6 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_init = sub.add_parser("init", help="Scaffold a .claude-mesh config")
     p_init.add_argument("--peer", type=str, help="Peer name (defaults to project dirname)")
+    p_init.add_argument("--group", type=str, help="Mesh group name (defaults to 'solo')")
 
     p_send = sub.add_parser("send", help="Append an event to the peer inbox / team log")
     p_send.add_argument("text", type=str, help="The message body")
@@ -61,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_status()
     if args.command == "init":
         from claude_mesh.commands.init import run as run_init
-        return run_init(peer=args.peer)
+        return run_init(peer=args.peer, group=args.group)
     if args.command == "send":
         from claude_mesh.commands.send import run as run_send
         return run_send(text=args.text, kind=args.kind, to=args.to)

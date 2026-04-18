@@ -6,9 +6,8 @@ source "${SCRIPT_DIR}/_common.sh"
 
 PAYLOAD="$(cat)"
 
-# Extract path + tool from payload
-INFO="$(PAYLOAD="${PAYLOAD}" python3.11 - <<'PYEOF'
-import json, os, sys
+INFO="$(PAYLOAD="${PAYLOAD}" "${_PY}" - <<'PYEOF'
+import json, os
 try:
     d = json.loads(os.environ["PAYLOAD"])
     tool = d.get("tool_name", "") or d.get("tool", "")
@@ -26,10 +25,9 @@ if [ -z "${FILE_PATH}" ] || [ -z "${TOOL}" ]; then
     exit 0
 fi
 
-# Convert absolute path to relative if possible
 if [[ "${FILE_PATH}" = /* ]]; then
     FILE_PATH="${FILE_PATH#"${PWD}"/}"
 fi
 
-echo "${PAYLOAD}" | python3.11 -m claude_mesh notify-change "${FILE_PATH}" "${TOOL}" 2>>"${_log_dir}" || true
+echo "${PAYLOAD}" | PYTHONPATH="${_PLUGIN_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" "${_PY}" -m claude_mesh notify-change "${FILE_PATH}" "${TOOL}" 2>>"${_log_dir}" || true
 exit 0
