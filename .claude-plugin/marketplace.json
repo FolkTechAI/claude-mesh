@@ -1,0 +1,18 @@
+{
+  "name": "folktechai",
+  "owner": {
+    "name": "FolkTech AI LLC",
+    "url": "https://github.com/FolkTechAI"
+  },
+  "plugins": [
+    {
+      "name": "claude-mesh",
+      "source": "./",
+      "description": "FTAI-structured shared knowledge between Claude Code sessions. Works standalone or with Agent Teams.",
+      "version": "0.1.0",
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/FolkTechAI/claude-mesh",
+      "repository": "https://github.com/FolkTechAI/claude-mesh"
+    }
+  ]
+}
