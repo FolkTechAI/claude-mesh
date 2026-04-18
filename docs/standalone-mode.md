@@ -13,8 +13,11 @@ Standalone mode lets two Claude Code sessions coordinate across paired projects 
 
 ## Install
 
-```bash
-claude plugin add FolkTechAI/claude-mesh
+From inside a Claude Code session:
+
+```
+/plugin marketplace add FolkTechAI/claude-mesh
+/plugin install claude-mesh@folktechai
 ```
 
 ---
@@ -24,7 +27,11 @@ claude plugin add FolkTechAI/claude-mesh
 In each project that should participate in the mesh, run:
 
 ```bash
-claude-mesh init
+# in the vault project:
+claude-mesh init --peer vault --other brain
+
+# in the brain project:
+claude-mesh init --peer brain --other vault
 ```
 
 Or from inside a Claude session:
@@ -33,23 +40,28 @@ Or from inside a Claude session:
 /mesh-init
 ```
 
-This writes a `.claude-mesh` config file at the project root. Example for a vault project paired with a brain project:
+This writes a `.claude-mesh` config file at the project root. Example from the vault side:
 
 ```yaml
 mesh_group: vault-brain
 mesh_peer: vault
+mesh_peers:
+  - vault
+  - brain
 cross_cutting_paths:
   - src/api/**
   - src/shared/**
 ```
 
-The convention for `mesh_group` is `{peer_a}-{peer_b}`. Claude Mesh infers the "other peer" from the group name minus your own peer name. With `mesh_group: vault-brain` and `mesh_peer: vault`, the peer inbox is at:
+The `mesh_peers` list is authoritative for peer inference. The `mesh_group` is a human-readable label.
+
+> **Peer names may contain hyphens** (e.g. `my-project`). The explicit `mesh_peers` list makes this unambiguous. If you omit the list, the plugin falls back to prefix/suffix matching on the group name — `mesh_group` must then start or end with your `mesh_peer`.
+
+With the example above, the peer inbox is at:
 
 ```
 ~/.claude-mesh/groups/vault-brain/brain.ftai
 ```
-
-Run `claude-mesh init` in the brain project too, with `mesh_peer: brain` and the same `mesh_group`.
 
 ---
 
