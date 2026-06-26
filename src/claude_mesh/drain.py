@@ -9,7 +9,15 @@ from pathlib import Path
 from claude_mesh.ftai import Tag, parse_file
 
 
-def read_marker_path(knowledge_file: Path) -> Path:
+def read_marker_path(knowledge_file: Path, participant: str | None = None) -> Path:
+    """Read-marker path for a knowledge file.
+
+    In the N-way shared-log model each participant owns its own marker so that
+    one participant draining does not advance another's position. When no
+    participant is given (e.g. team mode), the legacy single marker is used.
+    """
+    if participant is not None:
+        return knowledge_file.with_suffix(f"{knowledge_file.suffix}.{participant}.read")
     return knowledge_file.with_suffix(knowledge_file.suffix + ".read")
 
 
@@ -17,7 +25,21 @@ def _iso_now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def drain_unread(knowledge_file: Path, marker_path: Path) -> str:
+def _parse_recipients(to_value: str | None) -> set[str] | None:
+    """Parse a `to:` field into a recipient set, or None for a broadcast.
+
+    Accepts `beta`, `[beta, gamma]`, or `beta, gamma`. Empty/absent -> broadcast.
+    """
+    if to_value is None:
+        return None
+    s = to_value.strip().strip("[]")
+    recipients = {part.strip() for part in s.split(",") if part.strip()}
+    return recipients or None
+
+
+def drain_unread(
+    knowledge_file: Path, marker_path: Path, participant: str | None = None
+) -> str:
     if not knowledge_file.exists():
         return ""
     tags = parse_file(knowledge_file)
@@ -34,9 +56,17 @@ def drain_unread(knowledge_file: Path, marker_path: Path) -> str:
         if tag.name in {"document", "schema", "channel"}:
             continue
         ts = tag.fields.get("timestamp")
-        if ts is None or last_read is None or ts > last_read:
-            block = _render_tag(tag)
-            unread_parts.append(block)
+        if not (ts is None or last_read is None or ts > last_read):
+            continue
+        # N-way routing: never echo your own events; directed events reach
+        # only their named recipients.
+        if participant is not None:
+            if tag.fields.get("from") == participant:
+                continue
+            recipients = _parse_recipients(tag.fields.get("to"))
+            if recipients is not None and participant not in recipients:
+                continue
+        unread_parts.append(_render_tag(tag))
     return "\n".join(unread_parts)
 
 
