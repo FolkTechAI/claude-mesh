@@ -74,3 +74,31 @@ def test_parse_malformed_raises(tmp_path):
     from claude_mesh.ftai import FTAIParseError
     with pytest.raises(FTAIParseError):
         parse_file(path)
+
+
+def test_parse_block_body_with_at_prefixed_line(tmp_path):
+    """A block body line that STARTS with '@' must not hijack the block.
+
+    Regression: message bodies inside @decision/@task/@schema blocks often
+    contain lines beginning with '@' (an @-mention on its own line, a pasted
+    code decorator, a quoted tag). The parser used to treat those as a new tag,
+    silently dropping the open block, so the block's real @end then raised
+    'Line N: @end without matching block tag' and crashed status/drain.
+    """
+    path = tmp_path / "log.ftai"
+    path.write_text(
+        "@ftai v2.0\n"
+        "\n"
+        "@decision\n"
+        "id: pick-transport\n"
+        "title: Pick transport\n"
+        "body: chosen after review\n"
+        "@property is a decorator we referenced\n"
+        "@end\n"
+        "\n"
+    )
+    tags = parse_file(path)
+    dec = [t for t in tags if t.name == "decision"]
+    assert len(dec) == 1
+    assert dec[0].is_block
+    assert dec[0].fields["id"] == "pick-transport"

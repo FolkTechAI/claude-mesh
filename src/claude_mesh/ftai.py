@@ -86,6 +86,14 @@ def parse_file(path: Path) -> list[Tag]:
             if tag_name == "ftai":
                 continue  # version header, skip
 
+            # Inside an open block, only @end is a tag (handled above). Any other
+            # line starting with '@' is block body prose (an @-mention, a pasted
+            # code decorator, a quoted tag), NOT a new tag. Without this guard such
+            # a line silently dropped the open block, so the block's real @end then
+            # raised "@end without matching block tag" and crashed status/drain.
+            if current_is_block:
+                continue
+
             if current is not None and not current_is_block:
                 tags.append(Tag(current_name or "", current, False))
 
