@@ -5,7 +5,12 @@ import sys
 from pathlib import Path
 
 from claude_mesh.config import find_config, load_config
-from claude_mesh.drain import drain_unread, read_marker_path
+from claude_mesh.drain import (
+    drain_unread,
+    drain_unread_with_high_water,
+    pending_marker_path,
+    read_marker_path,
+)
 from claude_mesh.mode import Mode, detect_mode
 from claude_mesh.stdin_util import read_hook_payload
 from claude_mesh.storage import resolve_knowledge_path
@@ -67,9 +72,20 @@ def run(fmt: str = "ftai") -> int:
         log = resolve_knowledge_path(mode, payload, None, home)
 
     marker = read_marker_path(log)
-    out = drain_unread(log, marker, participant=participant)
+    out, high_water = drain_unread_with_high_water(log, marker, participant=participant)
     if not out:
         return 0
+
+    # Record what this drain actually covered. mark-read advances to exactly
+    # this point rather than to wall-clock now, so anything appended while we
+    # were rendering stays unread instead of being silently consumed.
+    if high_water:
+        try:
+            pending = pending_marker_path(marker)
+            pending.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            pending.write_text(high_water + "\n", encoding="utf-8")
+        except OSError:
+            pass  # non-fatal: mark-read falls back to now
 
     # Do NOT mark-read here; the hook does that after successful injection.
     if fmt == "prompt":

@@ -37,6 +37,36 @@ def _parse_recipients(to_value: str | None) -> set[str] | None:
     return recipients or None
 
 
+def pending_marker_path(marker_path: Path) -> Path:
+    """Sidecar holding the high-water timestamp of the last drain.
+
+    `mark-read` consumes this instead of stamping wall-clock now, so events
+    that land between the drain and the mark-read stay unread.
+    """
+    return marker_path.with_suffix(marker_path.suffix + ".pending")
+
+
+def drain_unread_with_high_water(
+    knowledge_file: Path, marker_path: Path, participant: str | None = None
+) -> tuple[str, str | None]:
+    """Drain unread events and report the newest timestamp among them.
+
+    The high-water value is what the marker must advance to. Using wall-clock
+    now instead loses anything appended during the drain -> mark-read window:
+    the event is newer than the marker, so it is never redelivered, and it was
+    never rendered, so it was never seen. Observed live between two agents.
+    """
+    text = drain_unread(knowledge_file, marker_path, participant)
+    if not text:
+        return "", None
+    stamps = [
+        line.split(":", 1)[1].strip()
+        for line in text.splitlines()
+        if line.startswith("timestamp:")
+    ]
+    return text, (max(stamps) if stamps else None)
+
+
 def drain_unread(
     knowledge_file: Path, marker_path: Path, participant: str | None = None
 ) -> str:
