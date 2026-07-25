@@ -10,6 +10,7 @@ from typing import Any
 from claude_mesh.events import MessageEvent, render_event, header_block
 from claude_mesh.mode import Mode, detect_mode
 from claude_mesh.sanitize import MAX_SUMMARY_CHARS, sanitize_summary
+from claude_mesh.stdin_util import read_hook_payload
 from claude_mesh.storage import atomic_append, resolve_knowledge_path
 
 BOILERPLATE_PATTERNS = {"done", "done.", "ok", "ok.", "acknowledged"}
@@ -17,11 +18,8 @@ MIN_LOG_LENGTH = 50
 
 
 def run() -> int:
-    if sys.stdin.isatty():
-        return 0
-    try:
-        payload: dict[str, Any] = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
+    payload: dict[str, Any] = read_hook_payload()
+    if not payload:
         return 0
 
     mode = detect_mode(payload)

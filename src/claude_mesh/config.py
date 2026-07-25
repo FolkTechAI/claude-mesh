@@ -51,6 +51,19 @@ class MeshConfig:
             return self.mesh_group[: -len(suffix)]
         return None
 
+    def other_peers(self) -> list[str]:
+        """Every participant in the group except this one (N-way safe).
+
+        Unlike `other_peer()`, this generalizes past two peers: with an
+        explicit `mesh_peers` roster it returns all the others, preserving
+        roster order. Falls back to the two-peer inference when no roster is
+        declared, and returns [] when the group cannot be resolved at all.
+        """
+        if self.mesh_peers:
+            return [p for p in self.mesh_peers if p != self.mesh_peer]
+        inferred = self.other_peer()
+        return [inferred] if inferred else []
+
 
 def _parse_minimal_yaml(text: str) -> dict[str, object]:
     """Parse a restricted YAML subset: string keys, string values, and a list of strings.

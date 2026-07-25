@@ -10,6 +10,7 @@ from typing import Any
 from claude_mesh.config import find_config, load_config
 from claude_mesh.events import TaskEvent, render_event, header_block
 from claude_mesh.mode import Mode, detect_mode
+from claude_mesh.stdin_util import read_hook_payload
 from claude_mesh.storage import atomic_append, resolve_knowledge_path
 
 
@@ -18,13 +19,7 @@ def _iso_now() -> str:
 
 
 def run(task_id: str, subject: str, status: str) -> int:
-    if sys.stdin.isatty():
-        payload: dict[str, Any] = {}
-    else:
-        try:
-            payload = json.loads(sys.stdin.read() or "{}")
-        except json.JSONDecodeError:
-            payload = {}
+    payload: dict[str, Any] = read_hook_payload()
 
     mode = detect_mode(payload)
     home = Path.home()
