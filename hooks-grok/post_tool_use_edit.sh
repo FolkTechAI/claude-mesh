@@ -30,14 +30,39 @@ try:
         if isinstance(v, str) and v:
             path = v
             break
-    # Prefer the workspace root so paths are stable regardless of the
-    # subdirectory a tool happened to run in.
-    base = (
+    def mesh_root_of(start):
+        """Walk up from a directory looking for the project that owns the mesh."""
+        try:
+            cur = os.path.realpath(start)
+        except Exception:
+            return ""
+        while True:
+            if os.path.isfile(os.path.join(cur, ".claude-mesh")):
+                return cur
+            parent = os.path.dirname(cur)
+            if parent == cur:
+                return ""
+            cur = parent
+
+    declared = (
         d.get("workspaceRoot")
         or d.get("cwd")
         or os.environ.get("PWD_FALLBACK", "")
         or os.getcwd()
     )
+
+    # Anchor on the project that actually declares .claude-mesh, discovered from
+    # the edited file itself. Grok sessions are frequently launched with the
+    # workspace at $HOME rather than the project, in which case the declared
+    # root owns no mesh config and every edit is dropped — and the relative path
+    # would come out as e.g. Developer/Serena/src/x.rs instead of src/x.rs.
+    # Fall back to the declared root when the file gives us nothing.
+    base = ""
+    if path and os.path.isabs(path):
+        base = mesh_root_of(os.path.dirname(path))
+    if not base:
+        base = mesh_root_of(declared) or declared
+
     if path and os.path.isabs(path):
         try:
             rp = os.path.realpath(path)
