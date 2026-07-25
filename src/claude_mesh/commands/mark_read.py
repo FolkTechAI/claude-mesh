@@ -9,15 +9,11 @@ from claude_mesh.config import find_config, load_config
 from claude_mesh.drain import mark_read, read_marker_path
 from claude_mesh.mode import Mode, detect_mode
 from claude_mesh.storage import resolve_knowledge_path
+from claude_mesh.stdin_util import read_hook_payload
 
 
 def _payload() -> dict:
-    if sys.stdin.isatty():
-        return {}
-    try:
-        return json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
-        return {}
+    return read_hook_payload()
 
 
 def run() -> int:

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import datetime as _dt
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +12,7 @@ from claude_mesh.events import FileChangeEvent, render_event, header_block
 from claude_mesh.mode import Mode, detect_mode
 from claude_mesh.pathval import PathValidationError, path_matches_any_glob, validate_relative_path
 from claude_mesh.sanitize import SensitiveDataFilter, sanitize_summary
+from claude_mesh.stdin_util import read_hook_payload
 from claude_mesh.storage import atomic_append, resolve_knowledge_path
 
 
@@ -54,35 +54,36 @@ def notify_change(
         cfg = load_config(cfg_path)
         if cfg.cross_cutting_paths and not path_matches_any_glob(path, cfg.cross_cutting_paths):
             return 0  # not cross-cutting
-        # In standalone pairs v1, write to THE OTHER peer's inbox.
-        # Resolution: explicit mesh_peers list > prefix/suffix match on group name.
-        other = cfg.other_peer()
-        if other is None:
+
+        # N-way: publish to EVERY other participant's inbox. The v1 code called
+        # other_peer(), which returned None for 3+ peers and dropped the event
+        # silently — a mesh that looked wired and published nothing.
+        others = cfg.other_peers()
+        if not others:
             print(
-                "claude-mesh notify-change: cannot infer the other peer; "
-                f"set `mesh_peers: [{cfg.mesh_peer}, <other>]` in .claude-mesh, "
-                f"or rename the group so it starts or ends with {cfg.mesh_peer!r} "
-                "(e.g. 'alpha-beta' when mesh_peer is 'alpha').",
+                "claude-mesh notify-change: no other peers resolved; "
+                f"declare the roster as `mesh_peers: [{cfg.mesh_peer}, <other>]` "
+                "in .claude-mesh",
                 file=sys.stderr,
             )
             return 0
-        target_path = resolve_knowledge_path(
-            mode, hook_payload, config=cfg, home=home, writing_to_peer=other
-        )
+        targets = [
+            resolve_knowledge_path(
+                mode, hook_payload, config=cfg, home=home, writing_to_peer=peer
+            )
+            for peer in others
+        ]
         from_ = cfg.mesh_peer
         group_or_team = cfg.mesh_group
-        participants = cfg.mesh_peers or [cfg.mesh_peer, other]
+        participants = cfg.mesh_peers or [cfg.mesh_peer, *others]
     else:
-        target_path = resolve_knowledge_path(mode, hook_payload, config=None, home=home)
+        targets = [resolve_knowledge_path(mode, hook_payload, config=None, home=home)]
         from_ = str(hook_payload.get("teammate_name", "unknown"))
         group_or_team = str(hook_payload.get("team_name", "unknown"))
         participants = [from_]
 
     summary = summary_override or _git_diff_stat(path, cwd)
     clean_summary = sanitize_summary(SensitiveDataFilter().redact(summary))
-
-    if not target_path.exists():
-        atomic_append(target_path, header_block(group_or_team, participants))
 
     event = FileChangeEvent(
         from_=from_,
@@ -91,17 +92,13 @@ def notify_change(
         tool=tool,
         summary=clean_summary or "(no git summary available)",
     )
-    atomic_append(target_path, render_event(event))
+    rendered = render_event(event)
+
+    for target_path in targets:
+        if not target_path.exists():
+            atomic_append(target_path, header_block(group_or_team, participants))
+        atomic_append(target_path, rendered)
     return 0
-
-
-def _read_payload() -> dict[str, Any]:
-    if sys.stdin.isatty():
-        return {}
-    try:
-        return json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
-        return {}
 
 
 def run(path: str, tool: str) -> int:
@@ -109,7 +106,7 @@ def run(path: str, tool: str) -> int:
         path=path,
         tool=tool,
         summary_override=None,
-        hook_payload=_read_payload(),
+        hook_payload=read_hook_payload(),
         home=Path.home(),
         cwd=Path.cwd(),
     )
