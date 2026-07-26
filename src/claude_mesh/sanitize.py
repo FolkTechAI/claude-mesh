@@ -6,7 +6,11 @@ from __future__ import annotations
 import re
 import unicodedata
 
-MAX_BODY_CHARS = 2048
+# Bodies carry hand-off briefs between agents, not just one-line notes. At 2048
+# a real brief lost 1760 chars mid-sentence and the tail was unrecoverable — the
+# truncation happens at write time, so the sender's copy is the only original.
+# Summaries stay tight: they hold git diff --stat output, not prose.
+MAX_BODY_CHARS = 16384
 MAX_SUMMARY_CHARS = 512
 
 _ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")

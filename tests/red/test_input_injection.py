@@ -3,7 +3,7 @@
 
 import pytest
 
-from claude_mesh.sanitize import sanitize_body, sanitize_field
+from claude_mesh.sanitize import MAX_BODY_CHARS, sanitize_body, sanitize_field
 
 
 def test_null_byte_stripped():
@@ -21,10 +21,23 @@ def test_zero_width_space_stripped():
 
 
 def test_oversized_body_truncated():
+    """Unbounded peer input must always be capped.
+
+    Asserted against MAX_BODY_CHARS rather than a literal so the security
+    property survives cap changes: the old literal (10_000) silently encoded
+    the then-current 2048 limit and failed the moment the cap was raised for
+    agent hand-off briefs.
+    """
     huge = "x" * 100_000
     out = sanitize_body(huge)
-    assert len(out) < 10_000
+    assert len(out) < MAX_BODY_CHARS + 200  # cap + truncation notice
+    assert len(out) < len(huge)
     assert "truncated" in out
+
+
+def test_body_at_cap_is_not_truncated():
+    exact = "x" * MAX_BODY_CHARS
+    assert "truncated" not in sanitize_body(exact)
 
 
 def test_prompt_injection_framing_survives():
