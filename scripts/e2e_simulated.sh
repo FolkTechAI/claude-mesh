@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/e2e_simulated.sh
 #
-# Simulated end-to-end scenarios for Claude Mesh v1.
+# Simulated end-to-end scenarios for FolkTech Mesh.
 #
 # What this script does:
 #   Invokes the claude-mesh CLI directly with constructed hook payloads.
@@ -18,7 +18,9 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ARTIFACTS_DIR="${REPO_ROOT}/tests/e2e/artifacts"
+ARTIFACTS_DIR="${MESH_E2E_ARTIFACTS_DIR:-${REPO_ROOT}/tests/e2e/artifacts}"
+PYTHON_BIN="${MESH_PYTHON_BIN:-python3.11}"
+export PYTHONPATH="${REPO_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
 # Capture a fixed timestamp for deterministic artifacts (stripped of wall-clock noise in README)
 RUN_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -34,12 +36,12 @@ run_mesh() {
     local tmp_home="$1"; shift
     local payload_file="$1"; shift
     # remaining args = claude-mesh subcommand + args
-    HOME="${tmp_home}" python3.11 -m claude_mesh "$@" < "${payload_file}"
+    HOME="${tmp_home}" "${PYTHON_BIN}" -m claude_mesh "$@" < "${payload_file}"
 }
 
 run_mesh_no_stdin() {
     local tmp_home="$1"; shift
-    HOME="${tmp_home}" python3.11 -m claude_mesh "$@"
+    HOME="${tmp_home}" "${PYTHON_BIN}" -m claude_mesh "$@"
 }
 
 ###############################################################################
@@ -172,7 +174,7 @@ JSON
 # Empty payload = standalone mode (no team_name)
 # The config file in VAULT_DIR drives group/peer resolution
 
-(cd "${VAULT_DIR}" && HOME="${S2_HOME}" python3.11 -m claude_mesh notify-change \
+(cd "${VAULT_DIR}" && HOME="${S2_HOME}" "${PYTHON_BIN}" -m claude_mesh notify-change \
     "src/api/auth.rs" "Edit" \
     < "${S2_VAULT_PAYLOAD}") \
     > "${S2_ARTIFACTS}/step2a_vault_notify.stdout" 2>&1 || true
@@ -190,18 +192,18 @@ else
 fi
 
 # --- Step 2b: brain drains its own inbox ---
-(cd "${BRAIN_DIR}" && HOME="${S2_HOME}" python3.11 -m claude_mesh drain --format prompt \
+(cd "${BRAIN_DIR}" && HOME="${S2_HOME}" "${PYTHON_BIN}" -m claude_mesh drain --format prompt \
     < /dev/null) \
     > "${S2_ARTIFACTS}/step2b_brain_drain.stdout" 2>&1 || true
 echo "[2d] brain drain exit: $?"
 
 # --- Step 2c: mark-read, then drain again (should be empty) ---
-(cd "${BRAIN_DIR}" && HOME="${S2_HOME}" python3.11 -m claude_mesh mark-read \
+(cd "${BRAIN_DIR}" && HOME="${S2_HOME}" "${PYTHON_BIN}" -m claude_mesh mark-read \
     < /dev/null) \
     > "${S2_ARTIFACTS}/step2c_brain_mark_read.stdout" 2>&1 || true
 echo "[2e] brain mark-read exit: $?"
 
-(cd "${BRAIN_DIR}" && HOME="${S2_HOME}" python3.11 -m claude_mesh drain --format prompt \
+(cd "${BRAIN_DIR}" && HOME="${S2_HOME}" "${PYTHON_BIN}" -m claude_mesh drain --format prompt \
     < /dev/null) \
     > "${S2_ARTIFACTS}/step2d_brain_drain_after_read.stdout" 2>&1 || true
 echo "[2f] brain drain-after-read exit: $?"
@@ -230,28 +232,24 @@ cat > "${S3_ARTIFACTS}/payload_empty.json" <<'JSON'
 {}
 JSON
 
-# Capture pre-run state of HOME dirs (should be empty)
-S3_BEFORE_MESH="$(ls "${S3_HOME}/.claude-mesh/" 2>/dev/null | wc -l || echo 0)"
-S3_BEFORE_CLAUDE="$(ls "${S3_HOME}/.claude/" 2>/dev/null | wc -l || echo 0)"
-
 # All hook entry points — they should all exit 0 and write nothing
-(cd "${S3_CWD}" && HOME="${S3_HOME}" python3.11 -m claude_mesh notify-change \
+(cd "${S3_CWD}" && HOME="${S3_HOME}" "${PYTHON_BIN}" -m claude_mesh notify-change \
     "src/main.py" "Edit" < "${S3_ARTIFACTS}/payload_empty.json") \
     > "${S3_ARTIFACTS}/step3a_notify_change.stdout" 2>&1
 EC_NOTIFY=$?
 
-(cd "${S3_CWD}" && HOME="${S3_HOME}" python3.11 -m claude_mesh subagent-turn \
+(cd "${S3_CWD}" && HOME="${S3_HOME}" "${PYTHON_BIN}" -m claude_mesh subagent-turn \
     < "${S3_ARTIFACTS}/payload_empty.json") \
     > "${S3_ARTIFACTS}/step3b_subagent_turn.stdout" 2>&1
 EC_SUBAGENT=$?
 
-(cd "${S3_CWD}" && HOME="${S3_HOME}" python3.11 -m claude_mesh task-event \
+(cd "${S3_CWD}" && HOME="${S3_HOME}" "${PYTHON_BIN}" -m claude_mesh task-event \
     --id "T-001" --subject "test" --status pending \
     < "${S3_ARTIFACTS}/payload_empty.json") \
     > "${S3_ARTIFACTS}/step3c_task_event.stdout" 2>&1
 EC_TASK=$?
 
-(cd "${S3_CWD}" && HOME="${S3_HOME}" python3.11 -m claude_mesh drain \
+(cd "${S3_CWD}" && HOME="${S3_HOME}" "${PYTHON_BIN}" -m claude_mesh drain \
     < "${S3_ARTIFACTS}/payload_empty.json") \
     > "${S3_ARTIFACTS}/step3d_drain.stdout" 2>&1
 EC_DRAIN=$?
@@ -262,14 +260,14 @@ echo "[3c] task-event exit:    ${EC_TASK}"
 echo "[3d] drain exit:         ${EC_DRAIN}"
 
 # status should print "inactive"
-(cd "${S3_CWD}" && HOME="${S3_HOME}" python3.11 -m claude_mesh status) \
+(cd "${S3_CWD}" && HOME="${S3_HOME}" "${PYTHON_BIN}" -m claude_mesh status) \
     > "${S3_ARTIFACTS}/step3e_status.stdout" 2>&1
 EC_STATUS=$?
 echo "[3e] status exit: ${EC_STATUS}"
 echo "[3e] status output: $(cat "${S3_ARTIFACTS}/step3e_status.stdout")"
 
 # doctor should print "inactive" without errors
-(cd "${S3_CWD}" && HOME="${S3_HOME}" python3.11 -m claude_mesh doctor) \
+(cd "${S3_CWD}" && HOME="${S3_HOME}" "${PYTHON_BIN}" -m claude_mesh doctor) \
     > "${S3_ARTIFACTS}/step3f_doctor.stdout" 2>&1
 EC_DOCTOR=$?
 echo "[3f] doctor exit: ${EC_DOCTOR}"

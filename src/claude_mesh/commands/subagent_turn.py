@@ -1,17 +1,15 @@
 # src/claude_mesh/commands/subagent_turn.py
 from __future__ import annotations
 
-import datetime as _dt
-import json
-import sys
 from pathlib import Path
 from typing import Any
 
-from claude_mesh.events import MessageEvent, render_event, header_block
+from claude_mesh.events import MessageEvent, header_block, render_event
+from claude_mesh.identity import new_event_id, utc_now
 from claude_mesh.mode import Mode, detect_mode
-from claude_mesh.sanitize import MAX_SUMMARY_CHARS, sanitize_summary
+from claude_mesh.sanitize import sanitize_summary
 from claude_mesh.stdin_util import read_hook_payload
-from claude_mesh.storage import atomic_append, resolve_knowledge_path
+from claude_mesh.storage import append_event, resolve_knowledge_path
 
 BOILERPLATE_PATTERNS = {"done", "done.", "ok", "ok.", "acknowledged"}
 MIN_LOG_LENGTH = 50
@@ -36,9 +34,11 @@ def run() -> int:
     path = resolve_knowledge_path(mode, payload, None, home)
 
     clean = sanitize_summary(msg)
-    if not path.exists():
-        atomic_append(path, header_block(team, [from_]))
-    ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    event = MessageEvent(from_=from_, timestamp=ts, body=clean)
-    atomic_append(path, render_event(event))
+    event = MessageEvent(
+        from_=from_,
+        timestamp=utc_now(),
+        body=clean,
+        event_id=new_event_id(),
+    )
+    append_event(path, header_block(team, [from_]), render_event(event))
     return 0

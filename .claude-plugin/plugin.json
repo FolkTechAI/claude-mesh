@@ -1,7 +1,7 @@
 {
   "name": "claude-mesh",
-  "version": "0.1.2",
-  "description": "FTAI-structured shared knowledge between Claude Code sessions. Works standalone or with Agent Teams.",
+  "version": "0.3.0",
+  "description": "FolkTech Mesh cross-vendor FTAI event fabric. Claude adapter with standalone and Agent Teams support.",
   "author": {
     "name": "FolkTech AI LLC",
     "url": "https://github.com/FolkTechAI"

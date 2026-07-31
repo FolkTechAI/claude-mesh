@@ -1,27 +1,23 @@
 # src/claude_mesh/commands/send.py
 from __future__ import annotations
 
-import datetime as _dt
 import sys
 from pathlib import Path
 from typing import Any
 
-from claude_mesh.config import ConfigError, find_config, load_config
+from claude_mesh.config import NAME_PATTERN, ConfigError, find_config, load_config
 from claude_mesh.events import (
     DecisionEvent,
     MessageEvent,
     NoteEvent,
-    render_event,
     header_block,
+    render_event,
 )
+from claude_mesh.identity import new_event_id, utc_now
 from claude_mesh.mode import Mode, detect_mode
 from claude_mesh.sanitize import SensitiveDataFilter, sanitize_body
 from claude_mesh.stdin_util import read_hook_payload
-from claude_mesh.storage import atomic_append, resolve_knowledge_path
-
-
-def _iso_now() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from claude_mesh.storage import append_event, resolve_knowledge_path
 
 
 def send_event(
@@ -35,7 +31,8 @@ def send_event(
     mode = detect_mode(hook_payload)
     filter_ = SensitiveDataFilter()
     clean = sanitize_body(filter_.redact(text))
-    ts = _iso_now()
+    ts = utc_now()
+    event_id = new_event_id()
 
     if mode == Mode.TEAM:
         teammate = str(hook_payload.get("teammate_name", "unknown"))
@@ -56,6 +53,12 @@ def send_event(
 
         others = cfg.other_peers()
         if to is not None:
+            if not NAME_PATTERN.fullmatch(to):
+                print(
+                    f"claude-mesh send: invalid peer name {to!r}",
+                    file=sys.stderr,
+                )
+                return 1
             # Directed: validate against the declared roster so a typo is loud,
             # not a silently-created inbox nobody reads.
             if cfg.mesh_peers and to not in cfg.mesh_peers:
@@ -95,12 +98,28 @@ def send_event(
         participants = cfg.mesh_peers or [cfg.mesh_peer, *recipients]
 
     if kind == "message":
-        event = MessageEvent(from_=participants_from, timestamp=ts, body=clean, to=to)
+        event = MessageEvent(
+            from_=participants_from,
+            timestamp=ts,
+            body=clean,
+            to=to,
+            event_id=event_id,
+        )
     elif kind == "note":
-        event = NoteEvent(from_=participants_from, timestamp=ts, content=clean)
+        event = NoteEvent(
+            from_=participants_from,
+            timestamp=ts,
+            content=clean,
+            event_id=event_id,
+        )
     elif kind == "decision":
         event = DecisionEvent(
-            from_=participants_from, timestamp=ts, id="", title="", content=clean
+            from_=participants_from,
+            timestamp=ts,
+            id="",
+            title="",
+            content=clean,
+            event_id=event_id,
         )
     else:
         print(f"claude-mesh send: unknown kind {kind}", file=sys.stderr)
@@ -108,9 +127,7 @@ def send_event(
 
     rendered = render_event(event)
     for path in targets:
-        if not path.exists():
-            atomic_append(path, header_block(group_or_team, participants))
-        atomic_append(path, rendered)
+        append_event(path, header_block(group_or_team, participants), rendered)
     return 0
 
 

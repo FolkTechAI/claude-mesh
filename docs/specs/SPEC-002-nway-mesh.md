@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Draft — pending CEO approval |
+| **Status** | Approved by CEO; implemented in v0.2.0 |
 | **Author** | Mike Folk (FolkTech AI LLC) |
 | **Created** | 2026-06-25 |
 | **Target release** | v0.2.0 |
@@ -17,15 +17,21 @@ SPEC-001 shipped two modes. **Team mode** is already N-way (all teammates read+a
 
 Now that the developer runs **more than two** independent Claude Code sessions on one machine (multiple agents across multiple projects), standalone mode must support **three or more** participants: any participant can broadcast to the group or address a specific participant, and each participant sees only what it has not yet seen.
 
-This spec resolves SPEC-001 Open Question #4 in favor of **collapsing standalone onto the team-mode storage model** (single shared log), and establishes two architectural seams so that future cross-location and cross-vendor work is additive, not a rewrite.
+This spec resolves SPEC-001 Open Question #4 in favor of **per-recipient inbox
+fanout** for standalone mode. This differs from the original draft's proposed
+shared log. Live cross-vendor testing exposed the operational advantages:
+recipient-scoped cursors, no raw directed-message exposure to non-recipients,
+and compatibility with the already deployed Claude/Grok adapters. The accepted
+decision is recorded in ADR-004.
 
 ## 2. Scope
 
 ### In scope for v2
 
 - **N-way standalone mode** (3+ participants in one group), same-machine.
-- **Unified storage model:** one shared append-only `knowledge.ftai` per group; per-participant read-markers. Per-peer inbox files (v1 standalone) are retired.
-- **Messaging semantics over the shared log:**
+- **N-way per-recipient fanout:** one inbox per participant; broadcasts are
+  appended to every recipient inbox except the sender.
+- **Messaging semantics over recipient inboxes:**
   - **Broadcast** — `@message` with no `to:` → drained by every participant except the sender.
   - **Directed** — `@message to: <peer>` (or `to: [<peer>, <peer>]`) → drained only by the named participant(s).
   - **Threads** — existing `thread:` slug, unchanged.
@@ -38,10 +44,13 @@ This spec resolves SPEC-001 Open Question #4 in favor of **collapsing standalone
 ### Out of scope for v2 (deliberately deferred)
 
 - **Cross-machine / cross-network** participation (different LANs/houses). Becomes a future **transport** plug-in via the transport seam. Requires a transport decision + a security-model inversion (peer identity, authentication, E2E encryption) — out of scope here.
-- **Cross-vendor** participation (Grok, Codex, other agents). Becomes a future **adapter** plug-in via the adapter seam. FTAI is already vendor-neutral; only the auto-wiring is Claude-specific.
+- **Additional cross-vendor adapters.** Grok is included in v0.2. Codex,
+  Hermes, and other runtimes use the vendor-neutral CLI until dedicated
+  lifecycle adapters are installed.
 - **Named channels** (multiple rooms per group). v2 = one room per group.
 - **Encryption / authentication** — same-machine, same-user trust boundary (unchanged from v1).
-- **Real-time push** — delivery remains turn-based (piggyback on `UserPromptSubmit`).
+- **Vendor-native process wake** — v0.2 provides a token-free `watch` seam;
+  each vendor adapter remains responsible for waking its own runtime safely.
 - **Rename / rebrand** — the name remains **Claude Mesh**. No CLI/config/dir renames.
 
 ### Non-goals
@@ -53,32 +62,40 @@ This spec resolves SPEC-001 Open Question #4 in favor of **collapsing standalone
 
 ### 3.1 One storage model
 
-Standalone mode adopts the team-mode model:
+Standalone mode generalizes the deployed inbox model:
 
 | Concern | v1 standalone (pairs) | v2 standalone (N-way) |
 |---|---|---|
-| Data file | one inbox file **per peer** (`{peer}.ftai`) | **one shared** `~/.claude-mesh/groups/{group}/knowledge.ftai` |
-| Writers | single-writer-per-file | many writers, atomic `O_APPEND` ≤ `PIPE_BUF` (as team mode already does) |
-| Ordering | n/a | append-time timestamp |
-| Read state | one read-marker per pair | **one read-marker per participant** |
+| Data file | one inbox file **per peer** (`{peer}.ftai`) | one inbox per participant, unchanged |
+| Writers | single intended peer writer | many peer writers, serialized by advisory lock |
+| Ordering | append order | append order plus unique `event_id` |
+| Read state | timestamp marker | exact byte cursor per inbox |
 
-Team mode is unchanged. After v2, both modes share the same storage shape, eliminating the dual-storage-model branch in the code.
+Team mode retains its shared `knowledge.ftai`, with a separate cursor for every
+teammate. The two modes intentionally keep different storage shapes because
+their delivery primitives differ.
 
 ### 3.2 Drain semantics (the N-way core)
 
-On `UserPromptSubmit`, a participant `P` drains the shared log for events newer than `P`'s read-marker, including an event **iff**:
+On publication, a broadcast is fanned out to every participant except the
+sender. A directed event is appended only to the named recipient inbox. On its
+supported lifecycle boundary, participant `P` drains events after its exact
+byte cursor, including an event **iff**:
 
 - the event's `from:` ≠ `P` (never echo your own messages), **and**
 - the event has no `to:` (broadcast), **or** `to:` contains `P` (directed).
 
-Then `P` advances its own read-marker. Read-markers are independent per participant, so each Claude sees each message exactly once regardless of the others.
+Then `P` advances its own cursor to the exact byte position covered by the
+drain. Delivery is at-least-once; `event_id` supports deduplication.
 
 ### 3.3 The two seams (structural requirement)
 
 These are **module boundaries**, not new transports/adapters. v2 implements exactly one of each (local-file transport; Claude-hook adapter), but the core must not hard-code either.
 
-- **Transport seam.** A `Transport` interface with the operations the core needs: `append(event)`, `read_since(marker)`, `advance_marker(marker)`. v2 ships `LocalFileTransport`. The message model, drain logic, and read-marker logic depend on the interface, never on file paths directly. (Future: a `NetworkTransport` is a new class, no core change.)
-- **Adapter seam.** The FTAI core + CLI (`send`/`drain`/`status`) is the vendor-neutral surface. The Claude Code hooks are one **adapter** that drives the CLI on Claude lifecycle events. The core never imports hook-specific assumptions. (Future: a Codex/Grok adapter drives the same CLI.)
+- **Publication seam.** `publish_event` owns recipient resolution and delivery;
+  event producers do not construct inbox paths.
+- **Adapter seam.** The FTAI core + CLI is vendor-neutral. Claude and Grok
+  adapters drive the CLI at their own lifecycle boundaries.
 
 Acceptance for the seams is a unit-level test that the core modules import neither file-path constants nor hook payload shapes directly (they go through the interface/adapter).
 
@@ -96,11 +113,15 @@ Acceptance for the seams is a unit-level test that the core modules import neith
 
 ### 4.3 `to:` is routing, not privacy
 
-On a single shared log, every participant can read the raw file (same-machine trust). `to:` controls **what is drained into whose context**, not who *can* read it. This is documented in the CLI help and the schema comment. True private DMs would require per-recipient files or encryption — explicitly out of scope.
+Standalone directed events are copied only to the recipient inbox, but `to:` is
+still routing rather than cryptographic access control. Every process running as
+the same operating-system user can read the local group directory.
 
 ## 5. Migration / compatibility
 
-- Existing **pair** standalone meshes: on first v2 run, if legacy `{peer}.ftai` inbox files exist, `claude-mesh doctor` reports them and offers a one-shot merge into the group `knowledge.ftai` (append, dedup by `from:`+`timestamp`+`body` hash). No silent data loss.
+- Existing **pair** standalone meshes require no data migration. Their inbox
+  files remain valid; v0.2 begins writing unique event IDs and migrates
+  timestamp markers to exact cursors after the next successful drain.
 - Team mode: no migration; already shared-log.
 - Read-markers: legacy per-pair markers map to per-participant markers by peer name.
 
@@ -125,14 +146,13 @@ All SPEC-001 §6 categories still apply (input injection, path security, sensiti
 
 ## 8. Acceptance Criteria
 
-- [ ] N-way standalone: 3+ participants, broadcast + directed + threads working.
-- [ ] Standalone uses the shared-log model; per-peer inbox path retired (with migration in `doctor`).
-- [ ] Per-participant read-markers; independence test passes.
-- [ ] Transport seam + adapter seam in place; seam-boundary tests pass; v2 ships exactly one transport (local-file) and one adapter (Claude hooks).
-- [ ] All SPEC-001 red tests still pass; new N-way red tests pass; total red-test count ≥ prior count.
-- [ ] `claude-mesh doctor` healthy on fresh N-way install and reports/merges legacy pair inboxes.
-- [ ] Name unchanged (Claude Mesh); no rename.
-- [ ] CI green.
+- [x] N-way standalone: 3+ participants, broadcast and directed delivery.
+- [x] Standalone uses locked per-recipient inbox fanout.
+- [x] Exact participant-scoped cursors; independence and collision tests pass.
+- [x] Vendor-neutral publication seam and Claude/Grok adapters.
+- [x] Existing red tests and new N-way/concurrency tests pass.
+- [x] `doctor` checks routing, permissions, versions, parsing, and task ledger.
+- [x] CLI compatibility retained under the `claude-mesh` command.
 
 ## 9. Open Questions
 

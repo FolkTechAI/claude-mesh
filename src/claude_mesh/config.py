@@ -165,6 +165,10 @@ def load_config(path: Path) -> MeshConfig:
                 f"mesh_peers entry {s!r} has invalid characters; only [a-z0-9-] allowed"
             )
         peers.append(s)
+    if len(peers) != len(set(peers)):
+        raise ConfigError("mesh_peers must contain unique peer names")
+    if peers and len(peers) < 2:
+        raise ConfigError("mesh_peers must contain at least two peers")
     if peers and peer not in peers:
         raise ConfigError(
             f"mesh_peer {peer!r} must appear in mesh_peers {peers!r}"

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from claude_mesh.config import MeshConfig, find_config, load_config, ConfigError
+from claude_mesh.config import ConfigError, find_config, load_config
 
 
 def test_load_valid_config(tmp_path: Path):
@@ -45,3 +45,29 @@ def test_find_config_walks_up(tmp_path: Path):
 def test_find_config_none_when_not_found(tmp_path: Path):
     found = find_config(tmp_path, stop_at=tmp_path.parent)
     assert found is None
+
+
+def test_duplicate_mesh_peers_rejected(tmp_path: Path):
+    path = tmp_path / ".claude-mesh"
+    path.write_text(
+        "mesh_group: agents\n"
+        "mesh_peer: alpha\n"
+        "mesh_peers:\n"
+        "  - alpha\n"
+        "  - beta\n"
+        "  - beta\n"
+    )
+    with pytest.raises(ConfigError, match="unique"):
+        load_config(path)
+
+
+def test_single_member_mesh_roster_rejected(tmp_path: Path):
+    path = tmp_path / ".claude-mesh"
+    path.write_text(
+        "mesh_group: agents\n"
+        "mesh_peer: alpha\n"
+        "mesh_peers:\n"
+        "  - alpha\n"
+    )
+    with pytest.raises(ConfigError, match="at least two"):
+        load_config(path)

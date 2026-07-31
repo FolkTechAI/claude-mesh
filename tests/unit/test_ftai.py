@@ -71,6 +71,7 @@ def test_parse_malformed_raises(tmp_path):
     path = tmp_path / "bad.ftai"
     path.write_text("garbage without any @tags\n")
     import pytest
+
     from claude_mesh.ftai import FTAIParseError
     with pytest.raises(FTAIParseError):
         parse_file(path)
@@ -102,3 +103,21 @@ def test_parse_block_body_with_at_prefixed_line(tmp_path):
     assert len(dec) == 1
     assert dec[0].is_block
     assert dec[0].fields["id"] == "pick-transport"
+    assert "@property is a decorator" in dec[0].fields["body"]
+
+
+def test_block_field_continuation_is_preserved(tmp_path):
+    path = tmp_path / "continued.ftai"
+    path.write_text(
+        "@ftai v2.0\n\n"
+        "@experience\n"
+        "id: E-1\n"
+        "lesson: first line\n"
+        "second line\n"
+        "@mention stays content\n"
+        "@end\n"
+    )
+    tag = parse_file(path)[0]
+    assert tag.name == "experience"
+    assert "second line" in tag.fields["lesson"]
+    assert "@mention stays content" in tag.fields["lesson"]

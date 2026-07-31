@@ -3,19 +3,22 @@
 
 @file_change
 from: backend
-timestamp: 2026-04-17T23:16:23Z
+event_id: evt-ab57bc6f-ed5f-44e9-9f3b-bde9d5927853
+timestamp: 2026-07-31T15:45:03.280059Z
 path: src/api/auth.rs
 tool: Edit
 summary: (no git summary available)
 @message
 from: backend
-timestamp: 2026-04-17T23:16:23Z
+event_id: evt-4c8ac3f8-02e9-4037-af49-acb82d62d8a3
+timestamp: 2026-07-31T15:45:03.328224Z
 body: Completed the JWT refresh rotation implementation in src/api/auth.rs. The token now rotates on every successful use and old tokens are blacklisted in Redis. This change affects the authentication flow across all endpoints — frontend will need to update token storage logic to capture the new token from response headers.
 @task
 id: TASK-042
 from: backend
-timestamp: 2026-04-17T23:16:23Z
+timestamp: 2026-07-31T15:45:03.376889Z
 subject: Update frontend token storage to handle rotating JWT
 status: pending
+event_id: evt-8f8b4d03-9c80-4497-947f-042e9a968499
 @end
 </mesh_context>

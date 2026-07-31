@@ -95,9 +95,12 @@ No hook ever returns non-zero. Hook failures log to `{knowledge_dir}/errors.log`
 
 ## Read Marker
 
-Each peer maintains a `{peer}-read-marker` file tracking the ISO timestamp of the last event it processed. Properties:
+Each inbox has a read-marker containing the exact byte cursor covered by the
+last successful drain. Legacy timestamp markers are accepted and migrate on
+the next drain. Properties:
 
-- **Monotonic** — the marker never moves backward regardless of wall-clock skew
+- **Monotonic** — the cursor never moves backward
+- **Clock-independent** — identical timestamps and clock skew cannot skip events
 - **Two-phase update** — drain events → inject into prompt → mark-read. If Claude crashes between inject and mark-read, events are re-delivered on the next turn (at-least-once delivery)
 - **Owned by the reader** — each peer writes its own marker; the writing peer never touches it
 

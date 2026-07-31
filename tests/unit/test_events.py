@@ -55,9 +55,17 @@ def test_render_decision_block_has_end():
 
 
 def test_render_task_block_has_end():
-    e = TaskEvent(from_="alpha", timestamp="t", id="1", subject="s", status="pending")
+    e = TaskEvent(
+        from_="alpha",
+        timestamp="t",
+        id="1",
+        subject="s",
+        status="pending",
+        to="beta",
+    )
     text = render_event(e)
     assert "@task" in text
+    assert "to: beta" in text
     assert text.rstrip().endswith("@end")
 
 
@@ -65,3 +73,9 @@ def test_render_note():
     e = NoteEvent(from_="alpha", timestamp="t", content="heads up")
     text = render_event(e)
     assert "@note" in text
+
+
+def test_single_line_event_preserves_multiline_body_visibly():
+    event = MessageEvent(from_="alpha", timestamp="t", body="line one\nline two")
+    text = render_event(event)
+    assert "body: line one ⏎ line two" in text

@@ -20,8 +20,9 @@ import pytest
 from claude_mesh.commands.drain import count_events
 from claude_mesh.commands.notify_change import notify_change
 from claude_mesh.commands.send import send_event
-from claude_mesh.config import MeshConfig, load_config
-from claude_mesh.stdin_util import read_hook_payload, read_stdin_bounded
+from claude_mesh.commands.task_event import run as task_event
+from claude_mesh.config import MeshConfig
+from claude_mesh.stdin_util import read_hook_payload
 
 ROSTER = ["alpha", "beta", "grok"]
 
@@ -29,9 +30,10 @@ ROSTER = ["alpha", "beta", "grok"]
 def _project(tmp_path: Path, peer: str, peers: list[str] = ROSTER) -> Path:
     d = tmp_path / peer
     (d / "src").mkdir(parents=True)
-    body = "mesh_group: g\nmesh_peer: {}\nmesh_peers:\n{}\ncross_cutting_paths:\n  - src/**\n".format(
-        peer, "".join(f"  - {p}\n" for p in peers)
-    )
+    body = (
+        "mesh_group: g\nmesh_peer: {}\nmesh_peers:\n{}"
+        "cross_cutting_paths:\n  - src/**\n"
+    ).format(peer, "".join(f"  - {p}\n" for p in peers))
     (d / ".claude-mesh").write_text(body)
     return d
 
@@ -74,6 +76,13 @@ def test_send_to_unknown_peer_is_loud(tmp_path):
     assert not _inbox(home, "alfa").exists()
 
 
+def test_directed_send_rejects_path_like_peer_without_roster(tmp_path):
+    home = tmp_path / "home"
+    cwd = _project(tmp_path, "grok", peers=[])
+    assert send_event("escape", "note", "../../outside", {}, home, cwd) == 1
+    assert not (home / ".claude-mesh" / "outside.ftai").exists()
+
+
 def test_send_to_self_is_refused(tmp_path):
     home = tmp_path / "home"
     cwd = _project(tmp_path, "grok")
@@ -106,6 +115,33 @@ def test_notify_change_ignores_non_cross_cutting_paths(tmp_path):
     home = tmp_path / "home"
     cwd = _project(tmp_path, "grok")
     assert notify_change("docs/readme.md", "write_file", "s", {}, home, cwd) == 0
+    assert not _inbox(home, "alpha").exists()
+
+
+def test_task_event_fans_out_on_three_peers(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    cwd = _project(tmp_path, "grok")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(cwd)
+    assert task_event("T-42", "Coordinate release", "pending") == 0
+    for peer in ("alpha", "beta"):
+        text = _inbox(home, peer).read_text()
+        assert "id: T-42" in text
+        assert "subject: Coordinate release" in text
+    assert not _inbox(home, "grok").exists()
+
+
+def test_task_event_directed_to_one_of_three_peers(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    cwd = _project(tmp_path, "grok")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(cwd)
+    assert task_event(
+        "T-43", "Verify result", "pending", to="beta", description="Run AKE"
+    ) == 0
+    text = _inbox(home, "beta").read_text()
+    assert "to: beta" in text
+    assert "description: Run AKE" in text
     assert not _inbox(home, "alpha").exists()
 
 
@@ -168,7 +204,7 @@ def test_read_stdin_bounded_returns_on_never_closing_pipe():
     )
     read_fd, write_fd = os.pipe()
     try:
-        proc = subprocess.Popen(
+        proc = subprocess.Popen(  # noqa: S603 - sys.executable with fixed test code
             [sys.executable, "-c", script],
             stdin=read_fd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )

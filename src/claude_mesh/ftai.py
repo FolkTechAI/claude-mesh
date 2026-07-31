@@ -3,8 +3,8 @@
 
 Only the subset of tags we use:
 - @document, @schema, @channel (headers)
-- @message, @file_change, @note (single-line tags)
-- @task, @decision (block tags, require @end)
+- @message, @file_change, @note, @heartbeat (single-line tags)
+- @task, @decision, @verification, @experience, @capability (block tags)
 
 See https://github.com/FolkTechAI/ftai-spec for the full format.
 """
@@ -38,8 +38,22 @@ def emit_tag(name: str, fields: dict[str, Any], block: bool) -> str:
     return "\n".join(lines) + "\n"
 
 
-SINGLE_LINE_TAGS = {"message", "file_change", "note", "document", "channel"}
-BLOCK_TAGS = {"task", "decision", "schema"}
+SINGLE_LINE_TAGS = {
+    "message",
+    "file_change",
+    "note",
+    "heartbeat",
+    "document",
+    "channel",
+}
+BLOCK_TAGS = {
+    "task",
+    "decision",
+    "verification",
+    "experience",
+    "capability",
+    "schema",
+}
 ALL_TAGS = SINGLE_LINE_TAGS | BLOCK_TAGS
 
 MAX_FILE_BYTES = 10 * 1024 * 1024  # 10 MB ceiling
@@ -55,6 +69,11 @@ def parse_file(path: Path) -> list[Tag]:
         raise FTAIParseError(f"File exceeds {MAX_FILE_BYTES} byte ceiling: {size}")
 
     text = path.read_text(encoding="utf-8", errors="replace")
+    return parse_text(text)
+
+
+def parse_text(text: str) -> list[Tag]:
+    """Parse FTAI text already loaded into memory."""
     lines = text.splitlines()
 
     if not any(line.strip().startswith("@ftai") for line in lines[:5]):
@@ -64,13 +83,21 @@ def parse_file(path: Path) -> list[Tag]:
     current: dict[str, str] | None = None
     current_name: str | None = None
     current_is_block: bool = False
+    current_key: str | None = None
 
     for lineno, line in enumerate(lines, start=1):
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             if current is not None and not current_is_block:
                 tags.append(Tag(current_name or "", current, False))
-                current, current_name, current_is_block = None, None, False
+                current, current_name, current_is_block, current_key = (
+                    None,
+                    None,
+                    False,
+                    None,
+                )
+            elif current is not None and current_is_block and current_key is not None:
+                current[current_key] += "\n"
             continue
 
         if stripped.startswith("@"):
@@ -80,7 +107,12 @@ def parse_file(path: Path) -> list[Tag]:
                 if current is None or not current_is_block:
                     raise FTAIParseError(f"Line {lineno}: @end without matching block tag")
                 tags.append(Tag(current_name or "", current, True))
-                current, current_name, current_is_block = None, None, False
+                current, current_name, current_is_block, current_key = (
+                    None,
+                    None,
+                    False,
+                    None,
+                )
                 continue
 
             if tag_name == "ftai":
@@ -92,6 +124,8 @@ def parse_file(path: Path) -> list[Tag]:
             # a line silently dropped the open block, so the block's real @end then
             # raised "@end without matching block tag" and crashed status/drain.
             if current_is_block:
+                if current_key is not None:
+                    current[current_key] += "\n" + line
                 continue
 
             if current is not None and not current_is_block:
@@ -102,10 +136,12 @@ def parse_file(path: Path) -> list[Tag]:
                 current = {}
                 current_name = tag_name
                 current_is_block = False
+                current_key = None
             else:
                 current = {}
                 current_name = tag_name
                 current_is_block = tag_name in BLOCK_TAGS
+                current_key = None
             continue
 
         if current is None:
@@ -113,7 +149,10 @@ def parse_file(path: Path) -> list[Tag]:
 
         if ":" in line:
             key, _, value = line.partition(":")
-            current[key.strip()] = value.strip()
+            current_key = key.strip()
+            current[current_key] = value.strip()
+        elif current_key is not None:
+            current[current_key] += "\n" + line
 
     if current is not None:
         if current_is_block:

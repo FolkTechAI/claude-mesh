@@ -22,6 +22,7 @@ from claude_mesh.commands.drain import run as drain_run
 from claude_mesh.commands.mark_read import run as mark_read_run
 from claude_mesh.drain import (
     drain_unread,
+    drain_unread_with_cursor,
     drain_unread_with_high_water,
     mark_read,
     pending_marker_path,
@@ -65,7 +66,11 @@ def test_message_arriving_after_drain_survives_mark_read(tmp_path, monkeypatch):
     group = home / ".claude-mesh" / "groups" / "g"
     group.mkdir(parents=True)
     log = group / "grok.ftai"
-    log.write_text(HEADER + "@note\nfrom: claudepeer\ntimestamp: 2026-01-01T00:00:10Z\ncontent: MESSAGE-A\n\n")
+    log.write_text(
+        HEADER
+        + "@note\nfrom: claudepeer\ntimestamp: 2026-01-01T00:00:10Z\n"
+        "content: MESSAGE-A\n\n"
+    )
 
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     monkeypatch.chdir(proj)
@@ -79,7 +84,9 @@ def test_message_arriving_after_drain_survives_mark_read(tmp_path, monkeypatch):
     assert mark_read_run() == 0
 
     marker = read_marker_path(log)
-    assert marker.read_text().strip() == "2026-01-01T00:00:10Z", "marker jumped past B"
+    marker_value = marker.read_text().strip()
+    assert marker_value.startswith("offset:"), "marker did not migrate to an exact cursor"
+    assert int(marker_value.partition(":")[2]) < log.stat().st_size, "marker jumped past B"
 
     # B must still be deliverable.
     still_unread = drain_unread(log, marker)
@@ -91,7 +98,9 @@ def test_pending_sidecar_is_cleared_after_mark_read(tmp_path, monkeypatch):
     home = tmp_path / "home"
     proj = tmp_path / "proj"
     proj.mkdir()
-    (proj / ".claude-mesh").write_text("mesh_group: g\nmesh_peer: grok\nmesh_peers:\n  - grok\n  - x\n")
+    (proj / ".claude-mesh").write_text(
+        "mesh_group: g\nmesh_peer: grok\nmesh_peers:\n  - grok\n  - x\n"
+    )
     group = home / ".claude-mesh" / "groups" / "g"
     group.mkdir(parents=True)
     log = group / "grok.ftai"
@@ -111,7 +120,9 @@ def test_bare_mark_read_without_drain_still_marks_now(tmp_path, monkeypatch):
     home = tmp_path / "home"
     proj = tmp_path / "proj"
     proj.mkdir()
-    (proj / ".claude-mesh").write_text("mesh_group: g\nmesh_peer: grok\nmesh_peers:\n  - grok\n  - x\n")
+    (proj / ".claude-mesh").write_text(
+        "mesh_group: g\nmesh_peer: grok\nmesh_peers:\n  - grok\n  - x\n"
+    )
     group = home / ".claude-mesh" / "groups" / "g"
     group.mkdir(parents=True)
     log = group / "grok.ftai"
@@ -129,3 +140,21 @@ def test_marker_never_moves_backwards(tmp_path):
     mark_read(marker, now="2026-01-01T00:00:20Z")
     mark_read(marker, now="2026-01-01T00:00:10Z")
     assert marker.read_text().strip() == "2026-01-01T00:00:20Z"
+
+
+def test_offset_marker_delivers_later_event_with_identical_timestamp(tmp_path):
+    timestamp = "2026-01-01T00:00:10Z"
+    log = _log(tmp_path, (timestamp, "FIRST"))
+    marker = read_marker_path(log)
+    _, _, cursor = drain_unread_with_cursor(log, marker)
+    assert cursor is not None
+    mark_read(marker, now=f"offset:{cursor}")
+
+    with log.open("a") as handle:
+        handle.write(
+            f"@note\nfrom: peer\ntimestamp: {timestamp}\ncontent: SECOND\n\n"
+        )
+
+    unread = drain_unread(log, marker)
+    assert "SECOND" in unread
+    assert "FIRST" not in unread

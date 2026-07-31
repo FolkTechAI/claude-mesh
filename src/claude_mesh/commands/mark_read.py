@@ -1,15 +1,13 @@
 # src/claude_mesh/commands/mark_read.py
 from __future__ import annotations
 
-import json
-import sys
 from pathlib import Path
 
 from claude_mesh.config import find_config, load_config
 from claude_mesh.drain import mark_read, pending_marker_path, read_marker_path
 from claude_mesh.mode import Mode, detect_mode
-from claude_mesh.storage import resolve_knowledge_path
 from claude_mesh.stdin_util import read_hook_payload
+from claude_mesh.storage import resolve_knowledge_path
 
 
 def _payload() -> dict:
@@ -30,7 +28,12 @@ def run() -> int:
     else:
         log = resolve_knowledge_path(mode, payload, None, home)
 
-    marker = read_marker_path(log)
+    participant = (
+        str(payload.get("teammate_name", "")).strip()
+        if mode == Mode.TEAM
+        else None
+    )
+    marker = read_marker_path(log, participant)
 
     # Advance to the high-water mark of the last drain when we have one, so a
     # message that arrived mid-turn is not consumed without ever being shown.
@@ -43,6 +46,9 @@ def run() -> int:
             through = pending.read_text(encoding="utf-8").strip() or None
     except OSError:
         through = None
+
+    if through is None and log.exists():
+        through = f"offset:{log.stat().st_size}"
 
     mark_read(marker, now=through)
 

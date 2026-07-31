@@ -1,34 +1,34 @@
 # src/claude_mesh/commands/notify_change.py
 from __future__ import annotations
 
-import datetime as _dt
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
 from claude_mesh.config import find_config, load_config
-from claude_mesh.events import FileChangeEvent, render_event, header_block
+from claude_mesh.events import FileChangeEvent, header_block, render_event
+from claude_mesh.identity import new_event_id, utc_now
 from claude_mesh.mode import Mode, detect_mode
 from claude_mesh.pathval import PathValidationError, path_matches_any_glob, validate_relative_path
 from claude_mesh.sanitize import SensitiveDataFilter, sanitize_summary
 from claude_mesh.stdin_util import read_hook_payload
-from claude_mesh.storage import atomic_append, resolve_knowledge_path
+from claude_mesh.storage import append_event, resolve_knowledge_path
 
 
 def _git_diff_stat(path: str, cwd: Path) -> str:
+    git = shutil.which("git")
+    if git is None:
+        return ""
     try:
-        r = subprocess.run(
-            ["git", "-C", str(cwd), "diff", "--stat", "--", path],
+        r = subprocess.run(  # noqa: S603 - fixed executable and argv; no shell
+            [git, "-C", str(cwd), "diff", "--stat", "--", path],
             capture_output=True, text=True, timeout=5, check=False,
         )
         return r.stdout.strip().split("\n")[-1] if r.returncode == 0 else ""
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return ""
-
-
-def _iso_now() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def notify_change(
@@ -87,17 +87,20 @@ def notify_change(
 
     event = FileChangeEvent(
         from_=from_,
-        timestamp=_iso_now(),
+        timestamp=utc_now(),
         path=path,
         tool=tool,
         summary=clean_summary or "(no git summary available)",
+        event_id=new_event_id(),
     )
     rendered = render_event(event)
 
     for target_path in targets:
-        if not target_path.exists():
-            atomic_append(target_path, header_block(group_or_team, participants))
-        atomic_append(target_path, rendered)
+        append_event(
+            target_path,
+            header_block(group_or_team, participants),
+            rendered,
+        )
     return 0
 
 

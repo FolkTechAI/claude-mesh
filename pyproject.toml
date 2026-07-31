@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claude-mesh"
-version = "0.1.2"
-description = "FTAI-structured shared knowledge layer for Claude Code multi-session coordination"
+version = "0.3.0"
+description = "FTAI-structured cross-vendor event fabric for local AI agent coordination"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 authors = [{ name = "FolkTech AI LLC" }]
-keywords = ["claude", "claude-code", "agent-teams", "ftai", "multi-agent"]
+keywords = ["agents", "claude", "grok", "codex", "ftai", "multi-agent"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "License :: OSI Approved :: Apache Software License",

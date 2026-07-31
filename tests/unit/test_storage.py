@@ -1,11 +1,11 @@
 # tests/unit/test_storage.py
+import threading
 from pathlib import Path
-
-import pytest
 
 from claude_mesh.config import MeshConfig
 from claude_mesh.mode import Mode
 from claude_mesh.storage import (
+    append_event,
     atomic_append,
     ensure_directory,
     resolve_knowledge_path,
@@ -40,3 +40,28 @@ def test_atomic_append_writes_complete_data(tmp_path: Path):
     atomic_append(f, "line 1\n")
     atomic_append(f, "line 2\n")
     assert f.read_text() == "line 1\nline 2\n"
+
+
+def test_concurrent_fresh_inbox_has_one_header_and_all_events(tmp_path: Path):
+    path = tmp_path / "group" / "peer.ftai"
+    header = "@ftai v2.0\n\n@channel\nparticipants: [a, b]\n\n"
+    barrier = threading.Barrier(9)
+
+    def write(index: int) -> None:
+        barrier.wait()
+        append_event(
+            path,
+            header,
+            f"@note\nfrom: p{index}\ntimestamp: t{index}\ncontent: {index}\n\n",
+        )
+
+    threads = [threading.Thread(target=write, args=(index,)) for index in range(8)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join()
+
+    text = path.read_text()
+    assert text.count("@ftai v2.0") == 1
+    assert text.count("@note") == 8
