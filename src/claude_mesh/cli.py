@@ -69,6 +69,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("subagent-turn", help="Auto-log a teammate turn summary from SubagentStop")
 
+    # Sync and remote peer commands
+    p_sync = sub.add_parser("sync", help="Sync inbox files with remote peers")
+    p_sync.add_argument("--peer", help="Sync with a specific peer (default: all remote peers)")
+    p_sync.add_argument("--watch", action="store_true", help="Keep running and sync periodically")
+    p_sync.add_argument("--interval", type=int, default=30, help="Seconds between syncs in watch mode (default: 30)")
+    
+    sub.add_parser("remote-doctor", help="Test SSH connectivity to remote peers")
+
     p_work = sub.add_parser(
         "task",
         help="Reliable task ledger: ownership, leases, retries, and verification",
@@ -242,6 +250,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "doctor":
         from claude_mesh.commands.doctor import run as run_doctor
         return run_doctor()
+    if args.command == "sync":
+        from claude_mesh.commands.sync import run_sync
+        return run_sync(peer=args.peer, watch=args.watch, interval=args.interval)
+    if args.command == "remote-doctor":
+        from claude_mesh.commands.remote_doctor import run_remote_doctor
+        return run_remote_doctor()
     if args.command == "task-event":
         from claude_mesh.commands.task_event import run as run_task_event
         return run_task_event(

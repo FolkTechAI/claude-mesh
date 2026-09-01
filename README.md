@@ -107,6 +107,30 @@ manual relay.
 
 ---
 
+## Remote Peer Sync (v0.4+)
+
+Enable mesh coordination across machines — for example, Neuro on a Grok Bot Linux machine working with Claude Code on your Mac mini:
+
+```bash
+# One-time: test SSH connectivity
+claude-mesh remote-doctor
+
+# Sync inbox files with remote peers
+claude-mesh sync
+
+# Watch mode: sync every 30 seconds
+claude-mesh sync --watch --interval 30
+```
+
+Full setup guide: [docs/remote-peer-setup.md](docs/remote-peer-setup.md)
+
+**Requirements**:
+- Passwordless SSH between machines
+- Same user on both machines
+- Local network (or VPN)
+
+---
+
 ## Reliable Work Handoffs
 
 Create a high-risk task for a specialist:
