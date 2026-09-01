@@ -107,27 +107,29 @@ manual relay.
 
 ---
 
-## Remote Peer Sync (v0.4+)
+## Cross-Machine Mesh (v0.4+)
 
-Enable mesh coordination across machines — for example, Neuro on a Grok Bot Linux machine working with Claude Code on your Mac mini:
+Enable mesh coordination across machines:
+
+**Default (Neuro on Grok Bot)**: File-drop transport via Mac hub
+- Mac mini is source of truth
+- Neuro writes to staging dir, copies to/from Mac via Grok Bot registered-computer tools
+- No SSH required
+- Guide: [docs/neuro-file-drop-setup.md](docs/neuro-file-drop-setup.md)
+
+**Optional (LAN machines)**: SSH/rsync transport
+- For two SSH-enabled machines on same network
+- Passwordless SSH + rsync sync
+- Guide: [docs/ssh-transport-optional.md](docs/ssh-transport-optional.md)
 
 ```bash
-# One-time: test SSH connectivity
-claude-mesh remote-doctor
+# File-drop: Neuro on Grok Bot box
+# (Uses registered-computer tools to copy files to/from Mac hub)
 
-# Sync inbox files with remote peers
-claude-mesh sync
-
-# Watch mode: sync every 30 seconds
-claude-mesh sync --watch --interval 30
+# SSH (optional): LAN machines only
+claude-mesh remote-doctor    # Test SSH connectivity
+claude-mesh sync             # Sync inbox files
 ```
-
-Full setup guide: [docs/remote-peer-setup.md](docs/remote-peer-setup.md)
-
-**Requirements**:
-- Passwordless SSH between machines
-- Same user on both machines
-- Local network (or VPN)
 
 ---
 

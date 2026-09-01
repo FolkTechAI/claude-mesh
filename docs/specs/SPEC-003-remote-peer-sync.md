@@ -1,8 +1,8 @@
-# SPEC-003: Remote Peer Sync for Cross-Machine Mesh
+# SPEC-003: Cross-Machine Mesh via Hub + File-Drop Transport
 
 | Field | Value |
 |---|---|
-| **Status** | Draft |
+| **Status** | Draft — SSH optional LAN, Neuro uses file-drop |
 | **Author** | Cloud Agent (for Mike Folk / FolkTech AI) |
 | **Created** | 2026-09-01 |
 | **Target release** | v0.4.0 |
@@ -12,9 +12,15 @@
 
 ## 1. Problem Statement
 
-Neuro (Mike's Grok Bot Chief of Staff) runs on a separate Linux Grok Bot machine, while other agents (Claude Code, Hermes, Codex, Grok Build) run on Mike's Mac mini. The existing FTAI mesh is same-machine only. Neuro cannot currently coordinate work with Mac-based agents without ad-hoc chat pings.
+Neuro (Mike's Grok Bot Chief of Staff) runs on a Cursor-managed Linux Grok Bot box, while other agents (Claude Code, Hermes, Codex, Grok Build) run on Mike's Mac mini. The existing FTAI mesh is same-machine only. Neuro cannot currently coordinate work with Mac-based agents.
 
-**Goal**: Enable Neuro to publish and consume mesh events as a first-class peer, coordinating with agents on Mike's Mac without a cloud message bus.
+**Topology**:
+- **Mac mini** (user `michaelfolk`, home `/Users/michaelfolk`, hostname `Michaels-Mac-mini.local`) is the mesh hub
+- **Grok Bot Linux box** (user `box`, home `/home/box`, hostname `cursor`) runs Neuro but is NOT on Mike's LAN
+- **Existing Mac reach**: Grok Bot registered-computer tools (Shell/Read/Write files on Mac) when Grok Bot app is open on Mac
+- **Existing Neuro bridge**: `/Users/michaelfolk/bin/neuro` on Mac for notes/calendar/iMessage
+
+**Goal**: Enable Neuro to publish and consume mesh events via the Mac hub without SSH.
 
 ---
 
@@ -22,229 +28,210 @@ Neuro (Mike's Grok Bot Chief of Staff) runs on a separate Linux Grok Bot machine
 
 ### In Scope
 
-- **Cross-machine peer registration**: Declare a peer as "remote" in `.claude-mesh` config
-- **Bidirectional inbox sync**: Push local writes to remote peer inboxes; pull remote writes to local inbox
-- **SSH/rsync transport**: Use SSH over local network (user-owned machines only)
-- **Manual and periodic sync**: `claude-mesh sync` command plus optional watch mode
-- **Neuro-specific adapter docs**: How Neuro publishes/drains via the bridge
-- **Security update**: Extend threat model to cover cross-machine trust
+- **Hub model**: Mac is source of truth; Neuro's FTAI files live on Mac
+- **File-drop transport**: Neuro writes to local staging dir, copies to/from Mac via registered-computer tools
+- **Mac-side CLI wrapper**: Optional `neuro mesh send` / `drain` that runs `claude-mesh` on Mac as neuro-grokbot peer
+- **Copy contract documentation**: Exact file paths and operations for Grok Bot registered-computer tools
+- **SSH as optional LAN transport**: Keep for two SSH-enabled user-owned machines, NOT for Neuro
 
 ### Out of Scope
 
-- Real-time sync daemon (v1 is pull-based; Neuro polls periodically)
-- Cloud relay services (must be local-only)
-- Multi-hop routing (direct Mac ↔ Grok Bot only)
-- Windows support (Mac and Linux only)
-- Automatic conflict resolution (last-write-wins via rsync)
+- SSH setup for Neuro (wrong transport)
+- Neuro running claude-mesh directly on Grok Bot box (Mac is hub)
+- Real-time daemon on Mac (PostToolUse hooks already handle same-machine)
+- Installing claude-mesh on Grok Bot box (not needed)
 
 ---
 
 ## 3. Architecture
 
-### 3.1 Config Extension
+### 3.1 Hub Model
 
-Add optional `remote_peers` map to `.claude-mesh`:
+**Source of truth**: `/Users/michaelfolk/.claude-mesh/groups/{group}/` on Mac mini.
+
+**Peers**:
+- `claude-mac` (Claude Code on Mac) — same-machine
+- `hermes-mac` (Hermes on Mac) — same-machine
+- `neuro-grokbot` (Neuro on Grok Bot box) — **file-drop peer**
+
+**Neuro's inbox**: `/Users/michaelfolk/.claude-mesh/groups/{group}/neuro-grokbot.ftai` (lives on Mac)
+
+### 3.2 File-Drop Transport
+
+Neuro operates via **staging directory** + **copy operations**:
+
+1. **Neuro publishes**:
+   - Neuro writes event to `/home/box/.claude-mesh-staging/outgoing/{peer}.ftai` on Grok Bot box
+   - Copies file to Mac: `/Users/michaelfolk/.claude-mesh/groups/{group}/{peer}.ftai`
+   - Uses Grok Bot registered-computer Write/Shell tools
+
+2. **Neuro drains**:
+   - Copies Neuro's inbox from Mac: `/Users/michaelfolk/.claude-mesh/groups/{group}/neuro-grokbot.ftai`
+   - Reads from `/home/box/.claude-mesh-staging/incoming/neuro-grokbot.ftai` on Grok Bot box
+   - Uses Grok Bot registered-computer Read tools
+
+3. **Mac-based agents**: Continue using existing same-machine hooks (no change)
+
+### 3.3 Copy Contract
+
+**For Grok Bot registered-computer tools implementation** (no SSH, no claude-mesh on box):
+
+| Operation | Source (Grok Bot box) | Destination (Mac) |
+|---|---|---|
+| Publish to peer | `/home/box/.claude-mesh-staging/outgoing/{peer}.ftai` | `/Users/michaelfolk/.claude-mesh/groups/{group}/{peer}.ftai` |
+| Fetch own inbox | `/Users/michaelfolk/.claude-mesh/groups/{group}/neuro-grokbot.ftai` | `/home/box/.claude-mesh-staging/incoming/neuro-grokbot.ftai` |
+
+**File operations**:
+- **Publish**: Append-only write (existing Mac file may exist, append or replace)
+- **Fetch**: Copy entire file (read-only from Mac perspective)
+
+**No daemons needed**: Neuro calls copy operations explicitly when publishing/draining.
+
+### 3.4 Mac-Side CLI Wrapper (Optional)
+
+Add to `/Users/michaelfolk/bin/neuro` (or separate script):
+
+```bash
+#!/bin/bash
+# neuro mesh send "message text"
+# Runs claude-mesh on Mac as neuro-grokbot peer
+
+case "$1" in
+  mesh)
+    shift
+    CLAUDE_MESH_PEER=neuro-grokbot claude-mesh "$@"
+    ;;
+  *)
+    # Existing neuro commands (notes, calendar, etc.)
+    ;;
+esac
+```
+
+**Usage from Grok Bot box**:
+```bash
+# Neuro invokes via registered-computer Shell on Mac:
+Shell(command='neuro mesh send --message "Task claimed" --to claude-mac')
+Shell(command='neuro mesh drain --format=ftai > /tmp/neuro-inbox.ftai')
+```
+
+Then copy results back to Grok Bot box if needed.
+
+### 3.5 SSH Transport (Optional LAN)
+
+**Kept for general use** between two SSH-enabled user-owned machines on same LAN.
+
+**NOT used by Neuro**. SSH code remains in `remote.py` with `remote_peers` config, but Neuro docs do NOT mention it.
+
+---
+
+## 4. Configuration
+
+### On Mac Mini
+
+`.claude-mesh` in project directory:
 
 ```yaml
-mesh_group: neuro-claude-mesh
+mesh_group: mac-neuro-mesh
 mesh_peer: claude-mac
 mesh_peers:
   - claude-mac
-  - neuro-grokbot
   - hermes-mac
-remote_peers:
-  neuro-grokbot:
-    host: grokbot.local  # or IP address
-    user: mike
-    inbox_path: /home/mike/.claude-mesh/groups/neuro-claude-mesh
+  - neuro-grokbot
+cross_cutting_paths:
+  - src/**
+# No remote_peers for file-drop peers (Neuro is local to Mac filesystem)
 ```
 
-**Remote peer contract**:
-- `host`: SSH hostname or IP (must be reachable on local network)
-- `user`: SSH username (passwordless key auth required)
-- `inbox_path`: Absolute path to the mesh group directory on remote machine
+**Hub directory**: `/Users/michaelfolk/.claude-mesh/groups/mac-neuro-mesh/`
 
-### 3.2 Sync Mechanism
+**Files**:
+- `claude-mac.ftai` — Claude's inbox (written by other peers)
+- `hermes-mac.ftai` — Hermes's inbox
+- `neuro-grokbot.ftai` — Neuro's inbox (written by Mac peers, read by Neuro via copy)
 
-**Bidirectional rsync**:
+### On Grok Bot Box
 
-1. **Push** (after local publish):
-   - When this peer writes to a remote peer's inbox, sync that inbox file to the remote machine
-   - Command: `rsync -az ~/.claude-mesh/groups/{group}/{remote-peer}.ftai {user}@{host}:{inbox_path}/{remote-peer}.ftai`
+**No `.claude-mesh` config needed** (Neuro is not running claude-mesh locally).
 
-2. **Pull** (before local drain):
-   - Fetch this peer's own inbox from all remote peers who might have written to it
-   - Command: `rsync -az {user}@{host}:{inbox_path}/{local-peer}.ftai ~/.claude-mesh/groups/{group}/{local-peer}.ftai`
+**Staging directories**:
+- `/home/box/.claude-mesh-staging/outgoing/` — Neuro writes events here before copying to Mac
+- `/home/box/.claude-mesh-staging/incoming/` — Neuro copies inbox from Mac here before reading
 
-3. **Read-marker sync**:
-   - Each peer's read-marker stays local (never synced)
-   - Remote writes append to the local inbox copy; local drain advances local read-marker
+---
 
-### 3.3 CLI Commands
+## 5. Implementation
 
-**New subcommands**:
+### 5.1 File-Drop Helper (New)
+
+Create `src/claude_mesh/file_drop.py`:
+
+```python
+"""File-drop transport for peers without direct filesystem access to hub.
+
+Used by Neuro on Grok Bot box to publish/drain via staging + copy to Mac hub.
+"""
+
+def publish_via_staging(event_ftai: str, target_peer: str, staging_dir: Path):
+    """Write event to staging/outgoing/{peer}.ftai for later copy to Mac hub."""
+    
+def fetch_inbox_to_staging(peer_name: str, staging_dir: Path):
+    """Prepare to copy peer's inbox from Mac hub to staging/incoming/."""
+```
+
+### 5.2 Mac-Side CLI Wrapper
+
+Add `scripts/neuro-mesh-wrapper.sh`:
 
 ```bash
-# One-time setup: test SSH connectivity to all remote peers
-claude-mesh remote-doctor
-
-# Manual sync: push local writes, pull remote writes
-claude-mesh sync [--peer NAME]
-
-# Watch mode: sync every N seconds (for Neuro's periodic polling)
-claude-mesh sync --watch --interval 30
+#!/bin/bash
+# Wrapper for neuro to run claude-mesh commands on Mac as neuro-grokbot peer
+export CLAUDE_MESH_PEER=neuro-grokbot
+exec claude-mesh "$@"
 ```
 
-**Hook integration** (optional, off by default):
-- New env var: `CLAUDE_MESH_AUTO_SYNC=1` enables post-publish sync
-- `PostToolUse` hook appends to remote inbox → calls `claude-mesh sync --peer {remote}` if enabled
+Install to `/Users/michaelfolk/bin/neuro-mesh` or integrate into existing `~/bin/neuro`.
 
-### 3.4 Neuro Adapter
+### 5.3 Documentation
 
-Neuro uses the standard CLI from its Linux box:
+**Update**:
+- `docs/specs/SPEC-003-*` → Rename to emphasize hub model, not SSH
+- `docs/remote-peer-setup.md` → Split into:
+  - `docs/file-drop-setup.md` — Neuro setup (default, no SSH)
+  - `docs/ssh-transport.md` — Optional SSH for LAN machines
 
-```bash
-# Neuro publishes an event
-claude-mesh send --message "Task claim: backend auth refactor" --to claude-mac
+**Remove**:
+- All Neuro + SSH instructions (ssh-keygen, ssh-copy-id, grokbot.local)
+- `/home/mike` paths (wrong user)
+- pip install on Grok Bot box (not needed)
 
-# Neuro syncs to deliver the message
-claude-mesh sync --peer claude-mac
-
-# Neuro drains unread events from other peers
-claude-mesh sync  # pull first
-claude-mesh drain
-```
-
-**Neuro bridge integration** (optional):
-- If `~/bin/neuro` already handles file sync, wrap `claude-mesh sync` inside it
-- Otherwise, Neuro calls `claude-mesh sync` directly via SSH or cron job
+**Add**:
+- Real paths: `/Users/michaelfolk`, `user box`, `/home/box`, `hostname cursor`
+- Grok Bot app open on Mac (one Allow tap if prompted)
+- Copy contract for registered-computer tools
+- Mac hub as source of truth
 
 ---
 
-## 4. Security
+## 6. Success Criteria
 
-### 4.1 Updated Threat Model
-
-> The trust boundary extends to: processes running under the same user on **user-owned machines connected via passwordless SSH**. We trust that Mike owns both the Mac mini and Grok Bot, and that SSH keys are properly secured. We still do NOT trust that mesh content is non-adversarial.
-
-**New risks**:
-- **SSH key compromise**: If `~/.ssh/id_rsa` is stolen, attacker could inject mesh events
-  - *Mitigation*: Standard SSH key security (passphrase, key rotation, file permissions)
-- **MitM on local network**: Attacker on LAN could intercept rsync traffic
-  - *Mitigation*: SSH encrypts transport; additionally, local network is user-controlled
-- **Remote machine compromise**: If Grok Bot is compromised, it could write malicious FTAI
-  - *Mitigation*: Same as current same-machine threat model (content is untrusted)
-
-**No new input sanitization needed**: All existing sanitizers (CAT 1-5) apply to remote-sourced events identically.
-
-### 4.2 Setup Requirements
-
-Mike must:
-1. Generate SSH keypair on Mac (if not present): `ssh-keygen -t ed25519`
-2. Copy pubkey to Grok Bot: `ssh-copy-id mike@grokbot.local`
-3. Test passwordless SSH: `ssh mike@grokbot.local 'echo ok'`
-4. Install `claude-mesh` on both machines (same version)
-5. Configure `.claude-mesh` with `remote_peers` on both sides
-
-**Firewall**: SSH port 22 must be open between Mac and Grok Bot (default on local network).
+- [ ] Neuro can publish event via staging + copy to Mac hub
+- [ ] Neuro can drain inbox via copy from Mac hub + read staging
+- [ ] Mac-based agents see Neuro's events (same as current same-machine)
+- [ ] No SSH setup required for Neuro
+- [ ] Setup: Grok Bot app open on Mac + one OS Allow tap
+- [ ] Tests for file-drop transport
+- [ ] SSH tests clearly labeled as optional LAN transport
+- [ ] Docs reflect real topology (no grokbot.local, no mike user on box)
+- [ ] PR marked draft, "do not merge until Mike approves"
 
 ---
 
-## 5. Implementation Plan
+## 7. Open Questions
 
-### 5.1 Files to Create
-
-| File | Purpose |
-|---|---|
-| `src/claude_mesh/commands/sync.py` | Sync command implementation |
-| `src/claude_mesh/commands/remote_doctor.py` | Remote peer connectivity check |
-| `src/claude_mesh/remote.py` | SSH/rsync transport logic |
-| `tests/unit/test_sync.py` | Unit tests for sync logic |
-| `tests/integration/test_remote_peer.py` | Integration test with mock SSH |
-| `docs/remote-peer-setup.md` | Setup guide for Neuro |
-
-### 5.2 Files to Modify
-
-| File | Change |
-|---|---|
-| `src/claude_mesh/config.py` | Add `remote_peers` field to `MeshConfig` |
-| `src/claude_mesh/cli.py` | Register `sync` and `remote-doctor` commands |
-| `src/claude_mesh/publish.py` | Optional: call sync after fanout if auto-sync enabled |
-| `docs/security-posture.md` | Update threat model for cross-machine topology |
-| `README.md` | Link to remote peer setup guide |
-
-### 5.3 Test Strategy
-
-**Unit tests**:
-- Config parsing with `remote_peers`
-- Rsync command construction
-- Error handling (SSH unreachable, rsync failure)
-
-**Integration tests**:
-- Mock SSH/rsync with `subprocess` patches
-- Verify push/pull order
-- Verify read-marker stays local
-
-**Manual E2E** (Mike's setup):
-1. Configure Mac as `claude-mac` with `neuro-grokbot` as remote peer
-2. Configure Grok Bot as `neuro-grokbot` with `claude-mac` as remote peer
-3. Claude on Mac publishes `@file_change`
-4. Run `claude-mesh sync` on Mac → inbox appears on Grok Bot
-5. Neuro on Grok Bot drains → sees the file change
-6. Neuro publishes `@message` reply
-7. Run `claude-mesh sync` on Grok Bot → Mac receives message
-8. Claude drains → sees Neuro's reply
+1. **Staging dir location**: `/home/box/.claude-mesh-staging/` or `/tmp/neuro-mesh-staging/`?
+2. **Copy timing**: Should Neuro copy after every publish, or batch N events?
+3. **Read-marker**: Store on Mac (source of truth) or Grok Bot box (local state)?
 
 ---
 
-## 6. Alternatives Considered
-
-### Alt 1: Mount remote filesystem via SSHFS
-- **Pro**: Transparent file access, no explicit sync
-- **Con**: Introduces latency and failure modes (network blip = hung reads)
-- **Verdict**: Rejected — rsync is more robust for intermittent connectivity
-
-### Alt 2: Shared NFS/SMB mount between Mac and Grok Bot
-- **Pro**: Single source of truth, no sync lag
-- **Con**: Requires additional daemon setup; Mike doesn't have this infrastructure
-- **Verdict**: Rejected — SSH is already present, rsync is simpler
-
-### Alt 3: Mesh relay daemon (long-running process)
-- **Pro**: Real-time sync, no manual polling
-- **Con**: Adds complexity, daemon management, and out-of-scope for v1
-- **Verdict**: Deferred to v2 — Neuro's periodic polling is acceptable for initial deployment
-
----
-
-## 7. Success Criteria
-
-- [ ] `claude-mesh remote-doctor` validates SSH connectivity to all remote peers
-- [ ] `claude-mesh sync` pushes and pulls inbox files correctly
-- [ ] Neuro can publish an event on Grok Bot and Claude sees it on Mac after sync
-- [ ] Claude can publish an event on Mac and Neuro sees it on Grok Bot after sync
-- [ ] Unit tests pass for config parsing and rsync command construction
-- [ ] Integration tests pass with mocked SSH
-- [ ] `docs/remote-peer-setup.md` documents complete Neuro setup (SSH keys, config, sync)
-- [ ] Security posture updated with cross-machine trust model
-- [ ] CI green on both Mac and Linux runners
-
----
-
-## 8. Open Questions
-
-1. **Sync frequency**: How often should Neuro poll? Default to 30s? User-configurable?
-2. **Conflict resolution**: If Mac and Grok Bot both append to the same inbox simultaneously, rsync will pick last-write-wins. Acceptable?
-3. **Supervisor integration**: Should the adversarial supervisor support remote workers? (Out of scope for v1, revisit if Mike requests it)
-
----
-
-## 9. References
-
-- SPEC-001: Claude Mesh v1 (same-machine model)
-- SPEC-002: N-way Mesh (generalizes beyond pairs)
-- `rsync` man page: https://linux.die.net/man/1/rsync
-- SSH key setup: https://www.ssh.com/academy/ssh/keygen
-
----
-
-**END OF SPEC-003.**
+**END OF SPEC-003 (Updated for Hub Model).**
