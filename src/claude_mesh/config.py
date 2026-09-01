@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TypedDict
 
 
 class ConfigError(ValueError):
@@ -20,12 +21,20 @@ NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 MAX_CONFIG_BYTES = 16 * 1024  # 16 KB ceiling
 
 
+class RemotePeerConfig(TypedDict):
+    """Configuration for a remote peer on another machine."""
+    host: str
+    user: str
+    inbox_path: str
+
+
 @dataclass(frozen=True)
 class MeshConfig:
     mesh_group: str
     mesh_peer: str
     cross_cutting_paths: list[str] = field(default_factory=list)
     mesh_peers: list[str] = field(default_factory=list)
+    remote_peers: dict[str, RemotePeerConfig] = field(default_factory=dict)
     source_path: Path | None = None
 
     def other_peer(self) -> str | None:
@@ -66,33 +75,93 @@ class MeshConfig:
 
 
 def _parse_minimal_yaml(text: str) -> dict[str, object]:
-    """Parse a restricted YAML subset: string keys, string values, and a list of strings.
+    """Parse a restricted YAML subset: string keys, string values, lists, and simple nested maps.
 
     Supports:
       key: value
       key:
         - item
         - item
+      key:
+        nested_key: value
+        nested_key2: value
+      key:
+        submap:
+          nested: value
     Lines beginning with '#' are comments. Blank lines ignored.
     """
     out: dict[str, object] = {}
     current_list_key: str | None = None
+    current_map_key: str | None = None
+    current_submap_key: str | None = None
 
     for raw in text.splitlines():
         line = raw.rstrip()
         if not line.strip() or line.lstrip().startswith("#"):
             continue
 
+        # List item (  - value)
         if line.startswith(("  - ", "\t- ")):
             if current_list_key is None:
                 raise ConfigError("List item without parent key")
             value = line.lstrip().removeprefix("- ").strip()
-            out.setdefault(current_list_key, [])
+            # Ensure it's actually a list
+            if not isinstance(out.get(current_list_key), list):
+                out[current_list_key] = []
             assert isinstance(out[current_list_key], list)
             out[current_list_key].append(value)  # type: ignore[union-attr]
             continue
 
+        # Deeply nested map item (        key: value)
+        if line.startswith(("        ", "\t\t\t")):
+            if current_map_key is None or current_submap_key is None:
+                raise ConfigError("Deeply nested item without parent keys")
+            if ":" not in line:
+                raise ConfigError(f"Unexpected nested line (no colon): {line!r}")
+            nested_key, _, nested_value = line.strip().partition(":")
+            nested_key = nested_key.strip()
+            nested_value = nested_value.strip()
+            
+            # Ensure parent is a dict
+            if not isinstance(out.get(current_map_key), dict):
+                out[current_map_key] = {}
+            parent = out[current_map_key]
+            assert isinstance(parent, dict)
+            
+            # Ensure submap exists
+            if current_submap_key not in parent:
+                parent[current_submap_key] = {}
+            assert isinstance(parent[current_submap_key], dict)
+            parent[current_submap_key][nested_key] = nested_value  # type: ignore[index]
+            continue
+
+        # Second-level map item (    key: or     key: value)
+        if line.startswith(("    ", "\t\t")):
+            if current_map_key is None:
+                raise ConfigError("Nested item without parent key")
+            if ":" not in line:
+                raise ConfigError(f"Unexpected nested line (no colon): {line!r}")
+            nested_key, _, nested_value = line.strip().partition(":")
+            nested_key = nested_key.strip()
+            nested_value = nested_value.strip()
+            
+            # Ensure parent is a dict (convert from list if needed)
+            if not isinstance(out.get(current_map_key), dict):
+                out[current_map_key] = {}
+            assert isinstance(out[current_map_key], dict)
+            
+            if not nested_value:
+                # This is a submap key
+                current_submap_key = nested_key
+                out[current_map_key][nested_key] = {}  # type: ignore[index]
+            else:
+                out[current_map_key][nested_key] = nested_value  # type: ignore[index]
+            continue
+
+        # Top-level key
         current_list_key = None
+        current_map_key = None
+        current_submap_key = None
 
         if ":" not in line:
             raise ConfigError(f"Unexpected line (no colon): {line!r}")
@@ -102,8 +171,10 @@ def _parse_minimal_yaml(text: str) -> dict[str, object]:
         value = rest.strip()
 
         if not value:
+            # Will be filled in by subsequent lines
             current_list_key = key
-            out[key] = []
+            current_map_key = key
+            out[key] = None  # Will be set by first nested item
         else:
             out[key] = value
 
@@ -174,11 +245,41 @@ def load_config(path: Path) -> MeshConfig:
             f"mesh_peer {peer!r} must appear in mesh_peers {peers!r}"
         )
 
+    # Parse remote_peers if present
+    remote_peers_raw = parsed.get("remote_peers", {})
+    if not isinstance(remote_peers_raw, dict):
+        raise ConfigError("remote_peers must be a map")
+    
+    remote_peers: dict[str, RemotePeerConfig] = {}
+    for remote_peer_name, remote_config_raw in remote_peers_raw.items():
+        if not isinstance(remote_config_raw, dict):
+            raise ConfigError(f"remote_peers.{remote_peer_name} must be a map")
+        
+        if not NAME_PATTERN.match(remote_peer_name):
+            raise ConfigError(
+                f"remote peer name {remote_peer_name!r} has invalid characters"
+            )
+        
+        # Validate required fields
+        if "host" not in remote_config_raw:
+            raise ConfigError(f"remote_peers.{remote_peer_name} missing 'host'")
+        if "user" not in remote_config_raw:
+            raise ConfigError(f"remote_peers.{remote_peer_name} missing 'user'")
+        if "inbox_path" not in remote_config_raw:
+            raise ConfigError(f"remote_peers.{remote_peer_name} missing 'inbox_path'")
+        
+        remote_peers[remote_peer_name] = RemotePeerConfig(
+            host=str(remote_config_raw["host"]),
+            user=str(remote_config_raw["user"]),
+            inbox_path=str(remote_config_raw["inbox_path"]),
+        )
+
     return MeshConfig(
         mesh_group=group,
         mesh_peer=peer,
         cross_cutting_paths=paths,
         mesh_peers=peers,
+        remote_peers=remote_peers,
         source_path=path,
     )
 

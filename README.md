@@ -107,6 +107,32 @@ manual relay.
 
 ---
 
+## Cross-Machine Mesh (v0.4+)
+
+Enable mesh coordination across machines:
+
+**Default (Neuro on Grok Bot)**: File-drop transport via Mac hub
+- Mac mini is source of truth
+- Neuro writes to staging dir, copies to/from Mac via Grok Bot registered-computer tools
+- No SSH required
+- Guide: [docs/neuro-file-drop-setup.md](docs/neuro-file-drop-setup.md)
+
+**Optional (LAN machines)**: SSH/rsync transport
+- For two SSH-enabled machines on same network
+- Passwordless SSH + rsync sync
+- Guide: [docs/ssh-transport-optional.md](docs/ssh-transport-optional.md)
+
+```bash
+# File-drop: Neuro on Grok Bot box
+# (Uses registered-computer tools to copy files to/from Mac hub)
+
+# SSH (optional): LAN machines only
+claude-mesh remote-doctor    # Test SSH connectivity
+claude-mesh sync             # Sync inbox files
+```
+
+---
+
 ## Reliable Work Handoffs
 
 Create a high-risk task for a specialist:

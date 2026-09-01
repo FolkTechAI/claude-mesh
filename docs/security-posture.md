@@ -6,14 +6,34 @@ Claude Mesh's security model, threat analysis, mitigations, and test strategy.
 
 ## Threat Model
 
-> The trust boundary is: we trust Claude Code processes running under the same user on the same machine. We do NOT trust that those processes produce non-adversarial content. A Claude session can be prompted by its user or by upstream context into writing a malicious mesh event — prompt injection, path traversal attempt, credential exfil. Every inbox event is treated as potentially hostile.
+> The trust boundary is: we trust Claude Code processes running under the same user on the same machine, **OR under the same user on user-owned machines connected via passwordless SSH** (v0.4+). We do NOT trust that those processes produce non-adversarial content. A Claude session can be prompted by its user or by upstream context into writing a malicious mesh event — prompt injection, path traversal attempt, credential exfil. Every inbox event is treated as potentially hostile.
 
 This means:
 
-- Same-machine, same-user = trusted topology
+- Same-machine, same-user = trusted topology (v1)
+- **Cross-machine, same-user, SSH-connected = trusted topology (v0.4+)**
 - Content flowing through the mesh = untrusted
-- Filesystem ACLs are a sufficient access control layer for the topology
-- Cross-machine scenarios are out of scope for v1 (see Section 2 of the spec)
+- Filesystem ACLs + SSH transport encryption are sufficient access control layers
+- Cross-machine scenarios require SSH key setup (see `docs/remote-peer-setup.md`)
+
+### Remote Peer Security (v0.4+)
+
+**New in v0.4**: Remote peer sync extends the mesh to user-owned machines connected via SSH:
+
+- **Transport**: SSH encrypts all rsync traffic between machines
+- **Authentication**: Passwordless SSH keys (user must set up `ssh-copy-id`)
+- **Trust**: We trust that Mike owns both Mac mini and Grok Bot
+- **Network**: Local network is assumed user-controlled (no untrusted intermediaries)
+
+**Additional risks from cross-machine sync**:
+1. **SSH key compromise**: If `~/.ssh/id_rsa` is stolen, attacker could inject mesh events
+   - *Mitigation*: Standard SSH key security (passphrase, key rotation, file permissions 600)
+2. **MitM on local network**: Attacker on LAN could intercept rsync traffic
+   - *Mitigation*: SSH encrypts transport; local network is user-controlled
+3. **Remote machine compromise**: If Grok Bot is compromised, it could write malicious FTAI
+   - *Mitigation*: Same as current threat model (content is untrusted; all sanitizers apply)
+
+**No new content sanitization needed**: All existing CAT 1-5 mitigations apply identically to remote-sourced events.
 
 ---
 
@@ -74,11 +94,11 @@ This means:
 
 ## What We Don't Defend Against
 
-**Cross-machine scenarios.** v1 is same-machine only. If you mount a remote filesystem and point `~/.claude-mesh/` at it, you are outside the supported topology. Cross-machine trust requires authentication and encryption, which are explicitly out of scope for v1.
-
-**Malicious OS or compromised filesystem.** We assume the OS ACLs are not bypassed. If the machine is compromised at the OS level, filesystem-based security controls provide no guarantee.
+**Malicious OS or compromised filesystem.** We assume the OS ACLs and SSH transport are not bypassed. If a machine is compromised at the OS level, filesystem-based security controls provide no guarantee.
 
 **Supply-chain attacks on this repo.** We defend against it through zero runtime dependencies. There are no third-party packages to compromise. The vendored FTAI parser is short enough to audit in 10 minutes.
+
+**Untrusted network intermediaries (v0.4+ remote peers).** We assume the local network between Mac and Grok Bot is user-controlled. If you route mesh traffic over the public internet without a VPN, SSH encryption still protects confidentiality but not against targeted attacks on your specific endpoints.
 
 ---
 
