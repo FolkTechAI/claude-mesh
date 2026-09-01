@@ -81,8 +81,18 @@ remote_peers:
 
 ### Step 4: Install claude-mesh on Both Machines
 
+⚠️ **claude-mesh is NOT on PyPI.**
+
+**If you have an existing installation** (e.g., via Homebrew or local checkout):
 ```bash
-pip3 install claude-mesh
+which claude-mesh
+claude-mesh --version
+```
+
+**If installing from source** (requires local checkout):
+```bash
+cd /path/to/claude-mesh
+pip3 install -e .
 ```
 
 ### Step 5: Validate Connectivity
