@@ -102,12 +102,16 @@ def test_writing_to_peer_traversal_cannot_escape_groups_root(tmp_path):
 
 
 def test_participant_marker_cannot_escape_inbox_dir(tmp_path):
-    """Team-mode read markers include teammate_name in the filename suffix."""
+    """Team-mode read markers include teammate_name in the filename suffix.
+
+    Built without Path.with_suffix: 3.12 rejects separators there, 3.11
+    interpolates them. The attack is the interpolated path either way.
+    """
     log = tmp_path / "teams" / "spike" / "knowledge.ftai"
     log.parent.mkdir(parents=True)
     log.write_text("@ftai v2.0\n", encoding="utf-8")
     hostile = "../../../../.ssh/authorized_keys"
-    escaped = log.with_suffix(f"{log.suffix}.{hostile}.read").resolve()
+    escaped = (log.parent / f"{log.name}.{hostile}.read").resolve()
     assert not str(escaped).startswith(str(log.parent.resolve()))
 
     with pytest.raises(PathValidationError):
