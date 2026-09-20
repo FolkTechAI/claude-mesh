@@ -1,7 +1,10 @@
 # tests/unit/test_drain.py
 from pathlib import Path
 
+import pytest
+
 from claude_mesh.drain import drain_unread, mark_read, read_marker_path
+from claude_mesh.pathval import PathValidationError
 
 
 def test_drain_returns_empty_when_no_file(tmp_path: Path):
@@ -31,6 +34,19 @@ def test_mark_read_then_drain_is_empty(tmp_path: Path):
     mark_read(marker)
     out = drain_unread(log, marker)
     assert out == ""
+
+
+def test_participant_marker_stays_beside_inbox(tmp_path: Path):
+    log = tmp_path / "knowledge.ftai"
+    marker = read_marker_path(log, "alpha")
+    assert marker.parent == log.parent
+    assert marker.name.endswith(".alpha.read")
+
+
+def test_hostile_participant_marker_rejected(tmp_path: Path):
+    log = tmp_path / "knowledge.ftai"
+    with pytest.raises(PathValidationError):
+        read_marker_path(log, "../../evil")
 
 
 def test_marker_never_moves_backwards(tmp_path: Path):

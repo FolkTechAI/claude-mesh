@@ -47,40 +47,44 @@ def notify_change(
 
     mode = detect_mode(hook_payload)
 
-    if mode == Mode.STANDALONE:
-        cfg_path = find_config(cwd)
-        if cfg_path is None:
-            return 0  # inactive
-        cfg = load_config(cfg_path)
-        if cfg.cross_cutting_paths and not path_matches_any_glob(path, cfg.cross_cutting_paths):
-            return 0  # not cross-cutting
+    try:
+        if mode == Mode.STANDALONE:
+            cfg_path = find_config(cwd)
+            if cfg_path is None:
+                return 0  # inactive
+            cfg = load_config(cfg_path)
+            if cfg.cross_cutting_paths and not path_matches_any_glob(path, cfg.cross_cutting_paths):
+                return 0  # not cross-cutting
 
-        # N-way: publish to EVERY other participant's inbox. The v1 code called
-        # other_peer(), which returned None for 3+ peers and dropped the event
-        # silently — a mesh that looked wired and published nothing.
-        others = cfg.other_peers()
-        if not others:
-            print(
-                "claude-mesh notify-change: no other peers resolved; "
-                f"declare the roster as `mesh_peers: [{cfg.mesh_peer}, <other>]` "
-                "in .claude-mesh",
-                file=sys.stderr,
-            )
-            return 0
-        targets = [
-            resolve_knowledge_path(
-                mode, hook_payload, config=cfg, home=home, writing_to_peer=peer
-            )
-            for peer in others
-        ]
-        from_ = cfg.mesh_peer
-        group_or_team = cfg.mesh_group
-        participants = cfg.mesh_peers or [cfg.mesh_peer, *others]
-    else:
-        targets = [resolve_knowledge_path(mode, hook_payload, config=None, home=home)]
-        from_ = str(hook_payload.get("teammate_name", "unknown"))
-        group_or_team = str(hook_payload.get("team_name", "unknown"))
-        participants = [from_]
+            # N-way: publish to EVERY other participant's inbox. The v1 code called
+            # other_peer(), which returned None for 3+ peers and dropped the event
+            # silently — a mesh that looked wired and published nothing.
+            others = cfg.other_peers()
+            if not others:
+                print(
+                    "claude-mesh notify-change: no other peers resolved; "
+                    f"declare the roster as `mesh_peers: [{cfg.mesh_peer}, <other>]` "
+                    "in .claude-mesh",
+                    file=sys.stderr,
+                )
+                return 0
+            targets = [
+                resolve_knowledge_path(
+                    mode, hook_payload, config=cfg, home=home, writing_to_peer=peer
+                )
+                for peer in others
+            ]
+            from_ = cfg.mesh_peer
+            group_or_team = cfg.mesh_group
+            participants = cfg.mesh_peers or [cfg.mesh_peer, *others]
+        else:
+            targets = [resolve_knowledge_path(mode, hook_payload, config=None, home=home)]
+            from_ = str(hook_payload.get("teammate_name", "unknown"))
+            group_or_team = str(hook_payload.get("team_name", "unknown"))
+            participants = [from_]
+    except PathValidationError as exc:
+        print(f"claude-mesh notify-change: rejecting path: {exc}", file=sys.stderr)
+        return 0  # hooks never block
 
     summary = summary_override or _git_diff_stat(path, cwd)
     clean_summary = sanitize_summary(SensitiveDataFilter().redact(summary))

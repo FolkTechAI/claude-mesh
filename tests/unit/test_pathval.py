@@ -6,6 +6,7 @@ import pytest
 from claude_mesh.pathval import (
     PathValidationError,
     path_matches_any_glob,
+    validate_path_component,
     validate_relative_path,
     validate_under_allowed_root,
 )
@@ -28,6 +29,24 @@ def test_validate_relative_rejects_absolute():
 def test_validate_relative_rejects_traversal():
     with pytest.raises(PathValidationError):
         validate_relative_path("../outside")
+
+
+def test_validate_path_component_accepts_safe_names():
+    validate_path_component("spike")
+    validate_path_component("mesh-team")
+    validate_path_component("My_Team")
+
+
+def test_validate_path_component_rejects_traversal():
+    for name in ("", ".", "..", "../../.ssh", "foo/bar", "foo\\bar", "a\x00b"):
+        with pytest.raises(PathValidationError):
+            validate_path_component(name)
+
+
+def test_validate_under_allowed_root_accepts_missing_root(tmp_path: Path):
+    root = tmp_path / "allowed"
+    candidate = root / "child" / "file.ftai"
+    validate_under_allowed_root(candidate, root, require_root=False)
 
 
 def test_validate_under_allowed_root_accepts(tmp_path: Path):

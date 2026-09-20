@@ -15,6 +15,7 @@ from claude_mesh.events import (
 )
 from claude_mesh.identity import new_event_id, utc_now
 from claude_mesh.mode import Mode, detect_mode
+from claude_mesh.pathval import PathValidationError
 from claude_mesh.sanitize import SensitiveDataFilter, sanitize_body
 from claude_mesh.stdin_util import read_hook_payload
 from claude_mesh.storage import append_event, resolve_knowledge_path
@@ -34,68 +35,72 @@ def send_event(
     ts = utc_now()
     event_id = new_event_id()
 
-    if mode == Mode.TEAM:
-        teammate = str(hook_payload.get("teammate_name", "unknown"))
-        targets = [resolve_knowledge_path(mode, hook_payload, config=None, home=home)]
-        participants_from = teammate
-        group_or_team = str(hook_payload.get("team_name", ""))
-        participants = [teammate]
-    else:
-        cfg_path = find_config(cwd)
-        if cfg_path is None:
-            print("claude-mesh send: no .claude-mesh config found", file=sys.stderr)
-            return 1
-        try:
-            cfg = load_config(cfg_path)
-        except ConfigError as exc:
-            print(f"claude-mesh send: config error: {exc}", file=sys.stderr)
-            return 1
-
-        others = cfg.other_peers()
-        if to is not None:
-            if not NAME_PATTERN.fullmatch(to):
-                print(
-                    f"claude-mesh send: invalid peer name {to!r}",
-                    file=sys.stderr,
-                )
-                return 1
-            # Directed: validate against the declared roster so a typo is loud,
-            # not a silently-created inbox nobody reads.
-            if cfg.mesh_peers and to not in cfg.mesh_peers:
-                print(
-                    f"claude-mesh send: unknown peer {to!r}; "
-                    f"mesh_peers is {cfg.mesh_peers!r}",
-                    file=sys.stderr,
-                )
-                return 1
-            if to == cfg.mesh_peer:
-                print(
-                    f"claude-mesh send: refusing to send to self ({to!r})",
-                    file=sys.stderr,
-                )
-                return 1
-            recipients = [to]
+    try:
+        if mode == Mode.TEAM:
+            teammate = str(hook_payload.get("teammate_name", "unknown"))
+            targets = [resolve_knowledge_path(mode, hook_payload, config=None, home=home)]
+            participants_from = teammate
+            group_or_team = str(hook_payload.get("team_name", ""))
+            participants = [teammate]
         else:
-            # Broadcast: fan out to every other participant's inbox.
-            recipients = others
-            if not recipients:
-                print(
-                    "claude-mesh send: no other peers to send to; "
-                    f"declare the roster as `mesh_peers: [{cfg.mesh_peer}, <other>]` "
-                    "in .claude-mesh",
-                    file=sys.stderr,
-                )
+            cfg_path = find_config(cwd)
+            if cfg_path is None:
+                print("claude-mesh send: no .claude-mesh config found", file=sys.stderr)
+                return 1
+            try:
+                cfg = load_config(cfg_path)
+            except ConfigError as exc:
+                print(f"claude-mesh send: config error: {exc}", file=sys.stderr)
                 return 1
 
-        targets = [
-            resolve_knowledge_path(
-                mode, hook_payload, config=cfg, home=home, writing_to_peer=peer
-            )
-            for peer in recipients
-        ]
-        participants_from = cfg.mesh_peer
-        group_or_team = cfg.mesh_group
-        participants = cfg.mesh_peers or [cfg.mesh_peer, *recipients]
+            others = cfg.other_peers()
+            if to is not None:
+                if not NAME_PATTERN.fullmatch(to):
+                    print(
+                        f"claude-mesh send: invalid peer name {to!r}",
+                        file=sys.stderr,
+                    )
+                    return 1
+                # Directed: validate against the declared roster so a typo is loud,
+                # not a silently-created inbox nobody reads.
+                if cfg.mesh_peers and to not in cfg.mesh_peers:
+                    print(
+                        f"claude-mesh send: unknown peer {to!r}; "
+                        f"mesh_peers is {cfg.mesh_peers!r}",
+                        file=sys.stderr,
+                    )
+                    return 1
+                if to == cfg.mesh_peer:
+                    print(
+                        f"claude-mesh send: refusing to send to self ({to!r})",
+                        file=sys.stderr,
+                    )
+                    return 1
+                recipients = [to]
+            else:
+                # Broadcast: fan out to every other participant's inbox.
+                recipients = others
+                if not recipients:
+                    print(
+                        "claude-mesh send: no other peers to send to; "
+                        f"declare the roster as `mesh_peers: [{cfg.mesh_peer}, <other>]` "
+                        "in .claude-mesh",
+                        file=sys.stderr,
+                    )
+                    return 1
+
+            targets = [
+                resolve_knowledge_path(
+                    mode, hook_payload, config=cfg, home=home, writing_to_peer=peer
+                )
+                for peer in recipients
+            ]
+            participants_from = cfg.mesh_peer
+            group_or_team = cfg.mesh_group
+            participants = cfg.mesh_peers or [cfg.mesh_peer, *recipients]
+    except PathValidationError as exc:
+        print(f"claude-mesh send: rejecting path: {exc}", file=sys.stderr)
+        return 1
 
     if kind == "message":
         event = MessageEvent(

@@ -38,6 +38,7 @@ This means:
 - Blocklist: `.ssh`, `Keychains`, `/etc`, `/usr`, `/var`, `/System`, `/bin`, `/sbin`
 - Symlinks are resolved before validation — no symlink escape
 - Group and peer names are restricted to `[a-z0-9-]+` — no slashes, dots, or traversal characters allowed
+- Hook-supplied `team_name`, `writing_to_peer`, and read-marker participant names are single path components; resolved inbox and marker paths must stay under those allowlisted roots
 - Glob patterns in `cross_cutting_paths` are validated before matching
 
 ### CAT 3 — Sensitive Data Exposure (P1)

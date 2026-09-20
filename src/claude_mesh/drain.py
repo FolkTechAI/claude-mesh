@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 from claude_mesh.ftai import Tag, parse_file, parse_text
+from claude_mesh.pathval import validate_path_component, validate_under_allowed_root
 
 
 def read_marker_path(knowledge_file: Path, participant: str | None = None) -> Path:
@@ -17,7 +18,12 @@ def read_marker_path(knowledge_file: Path, participant: str | None = None) -> Pa
     participant is given (e.g. team mode), the legacy single marker is used.
     """
     if participant is not None:
-        return knowledge_file.with_suffix(f"{knowledge_file.suffix}.{participant}.read")
+        validate_path_component(participant)
+        marker = knowledge_file.with_suffix(
+            f"{knowledge_file.suffix}.{participant}.read"
+        )
+        validate_under_allowed_root(marker, knowledge_file.parent, require_root=False)
+        return marker
     return knowledge_file.with_suffix(knowledge_file.suffix + ".read")
 
 
