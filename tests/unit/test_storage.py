@@ -2,8 +2,11 @@
 import threading
 from pathlib import Path
 
+import pytest
+
 from claude_mesh.config import MeshConfig
 from claude_mesh.mode import Mode
+from claude_mesh.pathval import PathValidationError
 from claude_mesh.storage import (
     append_event,
     atomic_append,
@@ -16,6 +19,28 @@ def test_resolve_team_mode(tmp_home: Path):
     payload = {"team_name": "spike", "teammate_name": "alpha"}
     path = resolve_knowledge_path(Mode.TEAM, payload, config=None, home=tmp_home)
     assert path == tmp_home / ".claude" / "teams" / "spike" / "knowledge.ftai"
+
+
+def test_resolve_team_mode_accepts_mixed_case_and_underscore(tmp_home: Path):
+    path = resolve_knowledge_path(
+        Mode.TEAM,
+        {"team_name": "Mesh_Team"},
+        config=None,
+        home=tmp_home,
+    )
+    assert path == tmp_home / ".claude" / "teams" / "Mesh_Team" / "knowledge.ftai"
+
+
+def test_resolve_standalone_rejects_hostile_peer(tmp_home: Path):
+    config = MeshConfig(mesh_group="vault-brain", mesh_peer="vault")
+    with pytest.raises(PathValidationError):
+        resolve_knowledge_path(
+            Mode.STANDALONE,
+            {},
+            config,
+            tmp_home,
+            writing_to_peer="../outside",
+        )
 
 
 def test_resolve_standalone_mode(tmp_home: Path):

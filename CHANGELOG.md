@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Security
+
+- Team-mode `team_name`, standalone `writing_to_peer`, and per-participant read
+  markers are validated as single path components and checked against the
+  allowlisted mesh roots so a hostile hook payload cannot escape
+  `~/.claude/teams/` or `~/.claude-mesh/groups/`.
+
 ## [0.3.0] — 2026-07-31
 
 ### Added

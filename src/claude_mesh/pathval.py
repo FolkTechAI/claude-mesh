@@ -27,14 +27,32 @@ def validate_relative_path(path_str: str) -> None:
         raise PathValidationError(f"Parent traversal not allowed: {path_str!r}")
 
 
-def validate_under_allowed_root(candidate: Path, allowed_root: Path) -> None:
+def validate_path_component(name: str) -> None:
+    """Reject names that cannot safely be a single directory or file segment.
+
+    Hook payloads and peer fields are interpolated into inbox and marker paths.
+    A value like ``../../.ssh`` or ``foo/bar`` must never become a path segment.
+    """
+    if not name or name in {".", ".."}:
+        raise PathValidationError(f"Invalid path component: {name!r}")
+    if "\x00" in name:
+        raise PathValidationError("Null byte in path component")
+    if "/" in name or "\\" in name:
+        raise PathValidationError(f"Path separators not allowed: {name!r}")
+    if any(ord(ch) < 32 for ch in name):
+        raise PathValidationError("Control characters not allowed in path component")
+
+
+def validate_under_allowed_root(
+    candidate: Path, allowed_root: Path, *, require_root: bool = True
+) -> None:
     """Resolve and ensure `candidate` is under `allowed_root`. Follows symlinks."""
     try:
         resolved = candidate.resolve(strict=False)
     except (OSError, RuntimeError) as exc:
         raise PathValidationError(f"Cannot resolve path: {candidate}") from exc
     try:
-        resolved_root = allowed_root.resolve(strict=True)
+        resolved_root = allowed_root.resolve(strict=require_root)
     except (OSError, RuntimeError) as exc:
         raise PathValidationError(f"Allowed root does not exist: {allowed_root}") from exc
     try:
