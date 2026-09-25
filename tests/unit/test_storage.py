@@ -2,8 +2,11 @@
 import threading
 from pathlib import Path
 
+import pytest
+
 from claude_mesh.config import MeshConfig
 from claude_mesh.mode import Mode
+from claude_mesh.pathval import PathValidationError
 from claude_mesh.storage import (
     append_event,
     atomic_append,
@@ -26,6 +29,19 @@ def test_resolve_standalone_mode(tmp_home: Path):
         Mode.STANDALONE, payload={}, config=config, home=tmp_home, writing_to_peer="brain"
     )
     assert path == tmp_home / ".claude-mesh" / "groups" / "vault-brain" / "brain.ftai"
+
+
+def test_resolve_team_mode_rejects_empty_team_name(tmp_home: Path):
+    with pytest.raises(PathValidationError, match="Empty team_name"):
+        resolve_knowledge_path(Mode.TEAM, {"team_name": "  "}, None, tmp_home)
+
+
+def test_resolve_standalone_validates_writing_to_peer(tmp_home: Path):
+    config = MeshConfig(mesh_group="vault-brain", mesh_peer="vault")
+    path = resolve_knowledge_path(
+        Mode.STANDALONE, {}, config, tmp_home, writing_to_peer="brain"
+    )
+    assert path.parent == tmp_home / ".claude-mesh" / "groups" / "vault-brain"
 
 
 def test_ensure_directory_creates_with_0700(tmp_path: Path):

@@ -37,7 +37,8 @@ This means:
 - `PathValidator` enforces an allowlist of permitted base directories (`~/.claude/teams/`, `~/.claude-mesh/groups/`)
 - Blocklist: `.ssh`, `Keychains`, `/etc`, `/usr`, `/var`, `/System`, `/bin`, `/sbin`
 - Symlinks are resolved before validation — no symlink escape
-- Group and peer names are restricted to `[a-z0-9-]+` — no slashes, dots, or traversal characters allowed
+- Group, peer, team, and participant names are restricted to `[a-z0-9-]+` — no slashes, dots, or traversal characters allowed
+- Hook-payload `team_name` / `teammate_name` and `writing_to_peer` are validated at the path boundary before any write; resolved knowledge, marker, and SQLite paths are confined to those roots
 - Glob patterns in `cross_cutting_paths` are validated before matching
 
 ### CAT 3 — Sensitive Data Exposure (P1)

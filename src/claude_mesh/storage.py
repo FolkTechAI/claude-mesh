@@ -10,6 +10,7 @@ from typing import Any
 
 from claude_mesh.config import MeshConfig
 from claude_mesh.mode import Mode
+from claude_mesh.pathval import validate_mesh_name, validate_under_allowed_root
 
 
 def ensure_directory(path: Path) -> None:
@@ -32,17 +33,25 @@ def resolve_knowledge_path(
     In STANDALONE mode when writing to peer: `~/.claude-mesh/groups/{group}/{peer}.ftai`
     """
     if mode == Mode.TEAM:
-        team_name = str(payload.get("team_name", "")).strip()
-        if not team_name:
-            raise ValueError("Team mode but no team_name in payload")
-        return home / ".claude" / "teams" / team_name / "knowledge.ftai"
+        team_name = validate_mesh_name(
+            str(payload.get("team_name", "")).strip(), "team_name"
+        )
+        allowed = home / ".claude" / "teams"
+        candidate = allowed / team_name / "knowledge.ftai"
+        validate_under_allowed_root(candidate, allowed, require_root=False)
+        return candidate
 
     if config is None:
         raise ValueError("Standalone mode requires a MeshConfig")
 
-    group_dir = home / ".claude-mesh" / "groups" / config.mesh_group
-    peer = writing_to_peer if writing_to_peer else config.mesh_peer
-    return group_dir / f"{peer}.ftai"
+    group = validate_mesh_name(config.mesh_group, "mesh_group")
+    peer = validate_mesh_name(
+        writing_to_peer if writing_to_peer else config.mesh_peer, "peer"
+    )
+    allowed = home / ".claude-mesh" / "groups"
+    candidate = allowed / group / f"{peer}.ftai"
+    validate_under_allowed_root(candidate, allowed, require_root=False)
+    return candidate
 
 
 def atomic_append(path: Path, text: str) -> None:

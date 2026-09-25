@@ -1,6 +1,4 @@
 # tests/unit/test_notify_change.py
-from pathlib import Path
-
 from claude_mesh.commands.notify_change import notify_change
 
 
@@ -91,3 +89,16 @@ def test_notify_change_explicit_mesh_peers(tmp_home):
     inbox = tmp_home / ".claude-mesh" / "groups" / "spike" / "beta.ftai"
     assert inbox.exists()
     assert "from: alpha" in inbox.read_text()
+
+
+def test_notify_change_rejects_traversing_team_name(tmp_home):
+    rc = notify_change(
+        path="src/api/auth.rs",
+        tool="Edit",
+        summary_override="should not land",
+        hook_payload={"team_name": "../../.ssh", "teammate_name": "alpha"},
+        home=tmp_home,
+        cwd=tmp_home,
+    )
+    assert rc == 0  # hooks never block
+    assert not (tmp_home / ".ssh" / "knowledge.ftai").exists()

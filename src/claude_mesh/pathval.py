@@ -9,9 +9,29 @@ from __future__ import annotations
 import fnmatch
 from pathlib import Path
 
+from claude_mesh.config import NAME_PATTERN
+
 
 class PathValidationError(ValueError):
     """Raised when a path fails a security check."""
+
+
+def validate_mesh_name(name: str, field: str = "name") -> str:
+    """Reject empty, null, and any identifier that cannot be one path component.
+
+    Mesh group, peer, team, and participant names become directory or file
+    names. pathlib joins an absolute component by discarding the prefix, so
+    ``team_name="/tmp/pwned"`` would otherwise write outside the mesh roots.
+    """
+    if not name:
+        raise PathValidationError(f"Empty {field}")
+    if "\x00" in name:
+        raise PathValidationError(f"Null byte in {field}")
+    if not NAME_PATTERN.fullmatch(name):
+        raise PathValidationError(
+            f"{field} {name!r} has invalid characters; only [a-z0-9-] allowed"
+        )
+    return name
 
 
 def validate_relative_path(path_str: str) -> None:
@@ -27,14 +47,16 @@ def validate_relative_path(path_str: str) -> None:
         raise PathValidationError(f"Parent traversal not allowed: {path_str!r}")
 
 
-def validate_under_allowed_root(candidate: Path, allowed_root: Path) -> None:
+def validate_under_allowed_root(
+    candidate: Path, allowed_root: Path, *, require_root: bool = True
+) -> None:
     """Resolve and ensure `candidate` is under `allowed_root`. Follows symlinks."""
     try:
         resolved = candidate.resolve(strict=False)
     except (OSError, RuntimeError) as exc:
         raise PathValidationError(f"Cannot resolve path: {candidate}") from exc
     try:
-        resolved_root = allowed_root.resolve(strict=True)
+        resolved_root = allowed_root.resolve(strict=require_root)
     except (OSError, RuntimeError) as exc:
         raise PathValidationError(f"Allowed root does not exist: {allowed_root}") from exc
     try:
