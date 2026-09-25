@@ -1,11 +1,13 @@
 # src/claude_mesh/commands/mark_read.py
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from claude_mesh.config import find_config, load_config
 from claude_mesh.drain import mark_read, pending_marker_path, read_marker_path
 from claude_mesh.mode import Mode, detect_mode
+from claude_mesh.pathval import PathValidationError
 from claude_mesh.stdin_util import read_hook_payload
 from claude_mesh.storage import resolve_knowledge_path
 
@@ -19,21 +21,25 @@ def run() -> int:
     mode = detect_mode(payload)
     home = Path.home()
     cwd = Path.cwd()
-    if mode == Mode.STANDALONE:
-        cfg_path = find_config(cwd)
-        if cfg_path is None:
-            return 0
-        cfg = load_config(cfg_path)
-        log = resolve_knowledge_path(mode, payload, cfg, home)
-    else:
-        log = resolve_knowledge_path(mode, payload, None, home)
+    try:
+        if mode == Mode.STANDALONE:
+            cfg_path = find_config(cwd)
+            if cfg_path is None:
+                return 0
+            cfg = load_config(cfg_path)
+            log = resolve_knowledge_path(mode, payload, cfg, home)
+        else:
+            log = resolve_knowledge_path(mode, payload, None, home)
 
-    participant = (
-        str(payload.get("teammate_name", "")).strip()
-        if mode == Mode.TEAM
-        else None
-    )
-    marker = read_marker_path(log, participant)
+        participant = (
+            str(payload.get("teammate_name", "")).strip()
+            if mode == Mode.TEAM
+            else None
+        )
+        marker = read_marker_path(log, participant)
+    except PathValidationError as exc:
+        print(f"claude-mesh mark-read: rejecting path: {exc}", file=sys.stderr)
+        return 1
 
     # Advance to the high-water mark of the last drain when we have one, so a
     # message that arrived mid-turn is not consumed without ever being shown.

@@ -11,7 +11,11 @@ from claude_mesh.config import find_config, load_config
 from claude_mesh.events import FileChangeEvent, header_block, render_event
 from claude_mesh.identity import new_event_id, utc_now
 from claude_mesh.mode import Mode, detect_mode
-from claude_mesh.pathval import PathValidationError, path_matches_any_glob, validate_relative_path
+from claude_mesh.pathval import (
+    PathValidationError,
+    path_matches_any_glob,
+    validate_relative_path,
+)
 from claude_mesh.sanitize import SensitiveDataFilter, sanitize_summary
 from claude_mesh.stdin_util import read_hook_payload
 from claude_mesh.storage import append_event, resolve_knowledge_path
@@ -77,7 +81,11 @@ def notify_change(
         group_or_team = cfg.mesh_group
         participants = cfg.mesh_peers or [cfg.mesh_peer, *others]
     else:
-        targets = [resolve_knowledge_path(mode, hook_payload, config=None, home=home)]
+        try:
+            targets = [resolve_knowledge_path(mode, hook_payload, config=None, home=home)]
+        except PathValidationError as exc:
+            print(f"claude-mesh notify-change: rejecting path: {exc}", file=sys.stderr)
+            return 0  # hooks never block
         from_ = str(hook_payload.get("teammate_name", "unknown"))
         group_or_team = str(hook_payload.get("team_name", "unknown"))
         participants = [from_]

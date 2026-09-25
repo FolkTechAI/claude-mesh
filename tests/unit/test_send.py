@@ -1,11 +1,8 @@
 # tests/unit/test_send.py
-import json
 import os
 from pathlib import Path
 
 from claude_mesh.commands.send import send_event
-from claude_mesh.config import MeshConfig
-from claude_mesh.mode import Mode
 
 
 def test_send_standalone_message(tmp_home: Path, project_with_mesh_config: Path):
@@ -40,6 +37,20 @@ def test_send_team_mode_message(tmp_home: Path):
     assert log.exists()
     assert "@message" in log.read_text()
     assert "team hello" in log.read_text()
+
+
+def test_send_rejects_traversing_team_name(tmp_home: Path):
+    rc = send_event(
+        text="should not land",
+        kind="message",
+        to=None,
+        hook_payload={"team_name": "../../.ssh", "teammate_name": "alpha"},
+        home=tmp_home,
+        cwd=tmp_home,
+    )
+    assert rc == 1
+    assert not (tmp_home / ".ssh" / "knowledge.ftai").exists()
+    assert not (tmp_home / ".claude" / "teams" / "../../.ssh" / "knowledge.ftai").exists()
 
 
 def test_send_sanitizes_body(tmp_home: Path):

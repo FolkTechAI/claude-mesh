@@ -6,6 +6,7 @@ import pytest
 from claude_mesh.pathval import (
     PathValidationError,
     path_matches_any_glob,
+    validate_mesh_name,
     validate_relative_path,
     validate_under_allowed_root,
 )
@@ -56,3 +57,25 @@ def test_validate_under_allowed_root_rejects_symlink_escape(tmp_path: Path):
     link.symlink_to(outside)
     with pytest.raises(PathValidationError):
         validate_under_allowed_root(link, root)
+
+
+def test_validate_mesh_name_accepts_hyphenated():
+    assert validate_mesh_name("vault-brain", "mesh_group") == "vault-brain"
+    assert validate_mesh_name("alpha", "peer") == "alpha"
+
+
+def test_validate_mesh_name_rejects_empty_and_traversal():
+    with pytest.raises(PathValidationError, match="Empty"):
+        validate_mesh_name("", "team_name")
+    with pytest.raises(PathValidationError):
+        validate_mesh_name("..", "team_name")
+    with pytest.raises(PathValidationError):
+        validate_mesh_name("MyTeam", "team_name")
+
+
+def test_validate_under_allowed_root_without_existing_root(tmp_path: Path):
+    missing = tmp_path / "not-yet"
+    candidate = missing / "spike" / "knowledge.ftai"
+    validate_under_allowed_root(candidate, missing, require_root=False)
+    with pytest.raises(PathValidationError):
+        validate_under_allowed_root(tmp_path / "other" / "file", missing, require_root=False)

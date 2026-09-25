@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from claude_mesh.identity import utc_now
+from claude_mesh.pathval import validate_mesh_name
 from claude_mesh.storage import ensure_directory
 
 
@@ -77,6 +78,7 @@ class AuditRecord:
 
 
 def supervisor_db_path(home: Path, group: str) -> Path:
+    group = validate_mesh_name(group, "group")
     return home / ".claude-mesh" / "groups" / group / "supervisor.sqlite3"
 
 

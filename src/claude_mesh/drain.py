@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 from claude_mesh.ftai import Tag, parse_file, parse_text
+from claude_mesh.pathval import PathValidationError, validate_mesh_name
 
 
 def read_marker_path(knowledge_file: Path, participant: str | None = None) -> Path:
@@ -17,8 +18,18 @@ def read_marker_path(knowledge_file: Path, participant: str | None = None) -> Pa
     participant is given (e.g. team mode), the legacy single marker is used.
     """
     if participant is not None:
-        return knowledge_file.with_suffix(f"{knowledge_file.suffix}.{participant}.read")
-    return knowledge_file.with_suffix(knowledge_file.suffix + ".read")
+        participant = validate_mesh_name(participant, "participant")
+        marker = knowledge_file.with_suffix(
+            f"{knowledge_file.suffix}.{participant}.read"
+        )
+    else:
+        marker = knowledge_file.with_suffix(knowledge_file.suffix + ".read")
+    if marker.parent != knowledge_file.parent:
+        raise PathValidationError(
+            f"Read marker {marker} escaped knowledge file directory "
+            f"{knowledge_file.parent}"
+        )
+    return marker
 
 
 def _iso_now() -> str:

@@ -7,6 +7,7 @@ import argparse
 import sys
 
 from claude_mesh import __version__
+from claude_mesh.pathval import PathValidationError
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -219,7 +220,14 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    try:
+        return _dispatch(args, parser)
+    except PathValidationError as exc:
+        print(f"claude-mesh: {exc}", file=sys.stderr)
+        return 1
 
+
+def _dispatch(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     # Dispatch — each subcommand handler returns int exit code
     if args.command == "status":
         from claude_mesh.commands.status import run as run_status
