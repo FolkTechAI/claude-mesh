@@ -215,6 +215,13 @@ class SupervisorStore:
         row = self.conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
         return self._run(row) if row else None
 
+    def latest_run(self, task_id: str) -> RunRecord | None:
+        row = self.conn.execute(
+            "SELECT * FROM runs WHERE task_id = ? ORDER BY created_at DESC LIMIT 1",
+            (task_id,),
+        ).fetchone()
+        return self._run(row) if row else None
+
     def list_runs(self, states: set[str] | None = None) -> list[RunRecord]:
         if states:
             placeholders = ",".join("?" for _ in states)

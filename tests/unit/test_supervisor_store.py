@@ -86,3 +86,27 @@ def test_recovery_blocks_interrupted_runs(tmp_path: Path):
 
         assert recovered[0].state == "blocked"
         assert "manual review" in (recovered[0].error or "")
+
+
+def test_latest_run_is_the_newest_for_that_task(tmp_path: Path):
+    with SupervisorStore(tmp_path / "supervisor.sqlite3") as store:
+        first = _run(store, tmp_path / "project")
+        store.transition(
+            first.id,
+            expected={"awaiting-approval"},
+            state="cancelled",
+            actor="operator",
+        )
+        second = store.create_run(
+            task_id="T-1",
+            state="awaiting-approval",
+            worker="worker",
+            critics=("critic",),
+            verifier="verifier",
+            workspace=tmp_path / "project",
+            risk="medium",
+            mode="approval",
+        )
+
+        assert store.latest_run("T-1") == second
+        assert store.latest_run("missing") is None

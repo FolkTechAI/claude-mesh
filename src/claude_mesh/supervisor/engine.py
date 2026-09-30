@@ -7,8 +7,9 @@ import hashlib
 import json
 import shutil
 import subprocess
+import sys
 import time
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from claude_mesh.config import MeshConfig
@@ -24,7 +25,12 @@ from claude_mesh.supervisor.config import (
     validate_workspace,
 )
 from claude_mesh.supervisor.prompts import critic_prompt, verifier_prompt, worker_prompt
-from claude_mesh.supervisor.store import RunConflict, RunRecord, SupervisorStore
+from claude_mesh.supervisor.store import (
+    TERMINAL_STATES,
+    RunConflict,
+    RunRecord,
+    SupervisorStore,
+)
 from claude_mesh.task_store import TaskConflict, TaskRecord, TaskStore
 
 
@@ -33,6 +39,14 @@ class SupervisorError(RuntimeError):
 
 
 RISK_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+
+
+@dataclass(frozen=True)
+class PollTick:
+    """One supervisor poll: newly planned or executed runs, plus new skips."""
+
+    runs: tuple[RunRecord, ...]
+    skipped: tuple[tuple[str, str], ...]
 
 
 class Supervisor:
@@ -48,6 +62,7 @@ class Supervisor:
         self.tasks = task_store
         self.runs = run_store
         self.home = home or Path.home()
+        self._plan_skip_signatures: set[tuple[str, str]] = set()
 
     def recover(self) -> list[RunRecord]:
         """Fail closed after a supervisor crash during a model invocation."""
@@ -268,25 +283,43 @@ class Supervisor:
             return self.execute(run.id)
         return run
 
-    def run_once(self) -> list[RunRecord]:
-        """Plan every pending task that has no active supervisor run."""
+    def run_once(self) -> PollTick:
+        """Plan pending tasks that have no active supervisor run.
+
+        In-flight tasks are skipped quietly. Real planning failures are
+        audited and returned so ``once`` / ``serve`` can show them instead
+        of looking idle.
+        """
         results: list[RunRecord] = []
+        skipped: list[tuple[str, str]] = []
         for task in self.tasks.list({"pending", "failed"}):
+            existing = self.runs.latest_run(task.id)
+            if existing is not None and existing.state not in TERMINAL_STATES:
+                continue
             try:
                 result = self.run_task(task.id)
-            except (SupervisorError, SupervisorConfigError, RunConflict):
+            except (SupervisorError, SupervisorConfigError, RunConflict) as exc:
+                reason = str(exc)
+                if self._record_plan_skip(task.id, reason):
+                    skipped.append((task.id, reason))
                 continue
+            self._clear_plan_skips(task.id)
             results.append(result)
             if len(results) >= self.config.max_concurrent_runs:
                 break
-        return results
+        return PollTick(runs=tuple(results), skipped=tuple(skipped))
 
     def serve(self, stop_after: float | None = None) -> None:
         """Foreground polling loop; process managers own daemonization."""
         started = time.monotonic()
         self.recover()
         while stop_after is None or time.monotonic() - started < stop_after:
-            self.run_once()
+            tick = self.run_once()
+            for task_id, reason in tick.skipped:
+                print(
+                    f"claude-mesh supervisor: skipped {task_id}: {reason}",
+                    file=sys.stderr,
+                )
             time.sleep(self.config.poll_interval_seconds)
 
     def _task(self, task_id: str) -> TaskRecord:
@@ -627,6 +660,25 @@ class Supervisor:
                 )
             except RunConflict:
                 pass
+
+    def _record_plan_skip(self, task_id: str, reason: str) -> bool:
+        """Persist a planning skip once per task+reason. Returns True if new."""
+        signature = (task_id, reason)
+        if signature in self._plan_skip_signatures:
+            return False
+        self._plan_skip_signatures.add(signature)
+        self.runs.record_audit(
+            None,
+            "plan-skipped",
+            "supervisor",
+            sanitize_summary(f"task={task_id}: {reason}"),
+        )
+        return True
+
+    def _clear_plan_skips(self, task_id: str) -> None:
+        self._plan_skip_signatures = {
+            item for item in self._plan_skip_signatures if item[0] != task_id
+        }
 
     def _lease_deadline(self) -> str:
         return (
