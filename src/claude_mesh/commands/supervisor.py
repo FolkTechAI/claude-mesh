@@ -113,6 +113,7 @@ def run(
         return init_config(path, group, workspace_root, operator)
     try:
         config = load_supervisor_config(path)
+        exit_code = 0
         with (
             TaskStore(task_db_path(Path.home(), config.group)) as tasks,
             SupervisorStore(supervisor_db_path(Path.home(), config.group)) as runs,
@@ -181,7 +182,15 @@ def run(
                 result = supervisor.execute(run_id)
                 _print(result, as_json)
             elif action == "once":
-                _print_many(supervisor.run_once(), as_json)
+                tick = supervisor.run_once()
+                for task_id, reason in tick.skipped:
+                    print(
+                        f"claude-mesh supervisor: skipped {task_id}: {reason}",
+                        file=sys.stderr,
+                    )
+                _print_many(list(tick.runs), as_json)
+                if tick.skipped and not tick.runs:
+                    exit_code = 1
             elif action == "serve":
                 supervisor.serve(stop_after=stop_after)
             elif action == "recover":
@@ -194,7 +203,7 @@ def run(
                 _print_many(runs.artifacts(run_id), as_json)
             else:
                 raise SupervisorError(f"unknown supervisor action {action!r}")
-        return 0
+        return exit_code
     except (
         OSError,
         RunConflict,
