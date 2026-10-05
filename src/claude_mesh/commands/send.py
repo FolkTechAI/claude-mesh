@@ -15,6 +15,7 @@ from claude_mesh.events import (
 )
 from claude_mesh.identity import new_event_id, utc_now
 from claude_mesh.mode import Mode, detect_mode
+from claude_mesh.pathval import PathValidationError
 from claude_mesh.sanitize import SensitiveDataFilter, sanitize_body
 from claude_mesh.stdin_util import read_hook_payload
 from claude_mesh.storage import append_event, resolve_knowledge_path
@@ -36,7 +37,11 @@ def send_event(
 
     if mode == Mode.TEAM:
         teammate = str(hook_payload.get("teammate_name", "unknown"))
-        targets = [resolve_knowledge_path(mode, hook_payload, config=None, home=home)]
+        try:
+            targets = [resolve_knowledge_path(mode, hook_payload, config=None, home=home)]
+        except PathValidationError as exc:
+            print(f"claude-mesh send: rejecting path: {exc}", file=sys.stderr)
+            return 1
         participants_from = teammate
         group_or_team = str(hook_payload.get("team_name", ""))
         participants = [teammate]

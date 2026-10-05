@@ -12,6 +12,7 @@ from claude_mesh.drain import (
     read_marker_path,
 )
 from claude_mesh.mode import Mode, detect_mode
+from claude_mesh.pathval import PathValidationError
 from claude_mesh.stdin_util import read_hook_payload
 from claude_mesh.storage import resolve_knowledge_path
 
@@ -58,24 +59,27 @@ def run(fmt: str = "ftai") -> int:
     cwd = Path.cwd()
     participant: str | None = None
 
-    if mode == Mode.STANDALONE:
-        cfg_path = find_config(cwd)
-        if cfg_path is None:
-            return 0
-        cfg = load_config(cfg_path)
-        log = resolve_knowledge_path(mode, payload, cfg, home)
-        # Enables routing filters in drain_unread: never echo our own events,
-        # and honor `to:` targeting. The marker stays on the legacy path because
-        # in per-peer-inbox mode the filename is already participant-scoped.
-        participant = cfg.mesh_peer
-    else:
-        log = resolve_knowledge_path(mode, payload, None, home)
-        participant = str(payload.get("teammate_name", "")).strip() or None
+    try:
+        if mode == Mode.STANDALONE:
+            cfg_path = find_config(cwd)
+            if cfg_path is None:
+                return 0
+            cfg = load_config(cfg_path)
+            log = resolve_knowledge_path(mode, payload, cfg, home)
+            # Enables routing filters in drain_unread: never echo our own events,
+            # and honor `to:` targeting. The marker stays on the legacy path because
+            # in per-peer-inbox mode the filename is already participant-scoped.
+            participant = cfg.mesh_peer
+        else:
+            log = resolve_knowledge_path(mode, payload, None, home)
+            participant = str(payload.get("teammate_name", "")).strip() or None
 
-    marker = read_marker_path(
-        log,
-        participant if mode == Mode.TEAM else None,
-    )
+        marker = read_marker_path(
+            log,
+            participant if mode == Mode.TEAM else None,
+        )
+    except PathValidationError:
+        return 0
     out, _high_water, cursor = drain_unread_with_cursor(
         log, marker, participant=participant
     )

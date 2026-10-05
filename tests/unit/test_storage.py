@@ -28,6 +28,15 @@ def test_resolve_standalone_mode(tmp_home: Path):
     assert path == tmp_home / ".claude-mesh" / "groups" / "vault-brain" / "brain.ftai"
 
 
+def test_resolve_team_mode_rejects_parent_segment(tmp_home: Path):
+    from claude_mesh.pathval import PathValidationError
+
+    with pytest.raises(PathValidationError, match="team_name"):
+        resolve_knowledge_path(
+            Mode.TEAM, {"team_name": ".."}, config=None, home=tmp_home
+        )
+
+
 def test_ensure_directory_creates_with_0700(tmp_path: Path):
     d = tmp_path / "sub" / "nested"
     ensure_directory(d)
