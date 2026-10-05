@@ -2,6 +2,8 @@
 import threading
 from pathlib import Path
 
+import pytest
+
 from claude_mesh.config import MeshConfig
 from claude_mesh.mode import Mode
 from claude_mesh.storage import (

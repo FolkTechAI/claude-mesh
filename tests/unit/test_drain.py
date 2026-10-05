@@ -1,6 +1,8 @@
 # tests/unit/test_drain.py
 from pathlib import Path
 
+import pytest
+
 from claude_mesh.drain import drain_unread, mark_read, read_marker_path
 
 
