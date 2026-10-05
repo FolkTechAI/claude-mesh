@@ -6,6 +6,7 @@ import pytest
 from claude_mesh.pathval import (
     PathValidationError,
     path_matches_any_glob,
+    validate_path_component,
     validate_relative_path,
     validate_under_allowed_root,
 )
@@ -56,3 +57,24 @@ def test_validate_under_allowed_root_rejects_symlink_escape(tmp_path: Path):
     link.symlink_to(outside)
     with pytest.raises(PathValidationError):
         validate_under_allowed_root(link, root)
+
+
+def test_validate_path_component_accepts_simple_names():
+    validate_path_component("spike")
+    validate_path_component("mesh-team")
+    validate_path_component("Explore")
+
+
+def test_validate_path_component_rejects_traversal():
+    for name in ("..", ".", "../../etc", "foo/bar", "foo\\bar", "a\x00b", ""):
+        with pytest.raises(PathValidationError):
+            validate_path_component(name)
+
+
+def test_validate_under_allowed_root_without_existing_root(tmp_path: Path):
+    root = tmp_path / "allowed"
+    validate_under_allowed_root(root / "file.txt", root, require_root=False)
+    with pytest.raises(PathValidationError):
+        validate_under_allowed_root(tmp_path / "outside.txt", root, require_root=False)
+    with pytest.raises(PathValidationError):
+        validate_under_allowed_root(root / ".." / "outside.txt", root, require_root=False)

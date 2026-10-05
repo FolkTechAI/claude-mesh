@@ -2,6 +2,8 @@
 import threading
 from pathlib import Path
 
+import pytest
+
 from claude_mesh.config import MeshConfig
 from claude_mesh.mode import Mode
 from claude_mesh.storage import (
@@ -26,6 +28,15 @@ def test_resolve_standalone_mode(tmp_home: Path):
         Mode.STANDALONE, payload={}, config=config, home=tmp_home, writing_to_peer="brain"
     )
     assert path == tmp_home / ".claude-mesh" / "groups" / "vault-brain" / "brain.ftai"
+
+
+def test_resolve_team_mode_rejects_parent_segment(tmp_home: Path):
+    from claude_mesh.pathval import PathValidationError
+
+    with pytest.raises(PathValidationError, match="team_name"):
+        resolve_knowledge_path(
+            Mode.TEAM, {"team_name": ".."}, config=None, home=tmp_home
+        )
 
 
 def test_ensure_directory_creates_with_0700(tmp_path: Path):

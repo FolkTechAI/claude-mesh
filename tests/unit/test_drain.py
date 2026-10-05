@@ -1,6 +1,8 @@
 # tests/unit/test_drain.py
 from pathlib import Path
 
+import pytest
+
 from claude_mesh.drain import drain_unread, mark_read, read_marker_path
 
 
@@ -38,3 +40,15 @@ def test_marker_never_moves_backwards(tmp_path: Path):
     mark_read(marker, now="2026-04-17T12:00:00Z")
     mark_read(marker, now="2026-04-17T11:00:00Z")  # attempt to rewind
     assert marker.read_text().strip() == "2026-04-17T12:00:00Z"
+
+
+def test_read_marker_path_keeps_participant_beside_inbox(tmp_path: Path):
+    from claude_mesh.pathval import PathValidationError
+
+    log = tmp_path / "knowledge.ftai"
+    log.touch()
+    marker = read_marker_path(log, "frontend")
+    assert marker.parent == log.parent
+    assert marker.name == "knowledge.ftai.frontend.read"
+    with pytest.raises(PathValidationError):
+        read_marker_path(log, "../escape")

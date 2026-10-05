@@ -77,7 +77,11 @@ def notify_change(
         group_or_team = cfg.mesh_group
         participants = cfg.mesh_peers or [cfg.mesh_peer, *others]
     else:
-        targets = [resolve_knowledge_path(mode, hook_payload, config=None, home=home)]
+        try:
+            targets = [resolve_knowledge_path(mode, hook_payload, config=None, home=home)]
+        except PathValidationError as exc:
+            print(f"claude-mesh notify-change: rejecting path: {exc}", file=sys.stderr)
+            return 0  # hooks never block
         from_ = str(hook_payload.get("teammate_name", "unknown"))
         group_or_team = str(hook_payload.get("team_name", "unknown"))
         participants = [from_]

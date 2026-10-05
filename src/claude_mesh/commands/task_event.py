@@ -9,6 +9,7 @@ from claude_mesh.config import NAME_PATTERN, find_config, load_config
 from claude_mesh.events import TaskEvent, header_block, render_event
 from claude_mesh.identity import new_event_id, utc_now
 from claude_mesh.mode import Mode, detect_mode
+from claude_mesh.pathval import PathValidationError
 from claude_mesh.stdin_util import read_hook_payload
 from claude_mesh.storage import append_event, resolve_knowledge_path
 
@@ -29,7 +30,11 @@ def run(
     if mode == Mode.TEAM:
         from_ = str(payload.get("teammate_name", "unknown"))
         team_name = str(payload.get("team_name", ""))
-        paths = [resolve_knowledge_path(mode, payload, None, home)]
+        try:
+            paths = [resolve_knowledge_path(mode, payload, None, home)]
+        except PathValidationError as exc:
+            print(f"claude-mesh task-event: rejecting path: {exc}", file=sys.stderr)
+            return 1
         group_or_team = team_name
         participants = [from_]
     else:
