@@ -15,7 +15,7 @@ from claude_mesh.events import (
 )
 from claude_mesh.identity import new_event_id, utc_now
 from claude_mesh.mode import Mode, detect_mode
-from claude_mesh.sanitize import SensitiveDataFilter, sanitize_body
+from claude_mesh.sanitize import clean_body
 from claude_mesh.stdin_util import read_hook_payload
 from claude_mesh.storage import append_event, resolve_knowledge_path
 
@@ -29,8 +29,7 @@ def send_event(
     cwd: Path,
 ) -> int:
     mode = detect_mode(hook_payload)
-    filter_ = SensitiveDataFilter()
-    clean = sanitize_body(filter_.redact(text))
+    clean = clean_body(text)
     ts = utc_now()
     event_id = new_event_id()
 

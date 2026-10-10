@@ -9,6 +9,7 @@ from claude_mesh.config import NAME_PATTERN, find_config, load_config
 from claude_mesh.events import TaskEvent, header_block, render_event
 from claude_mesh.identity import new_event_id, utc_now
 from claude_mesh.mode import Mode, detect_mode
+from claude_mesh.sanitize import clean_body, clean_summary, sanitize_field
 from claude_mesh.stdin_util import read_hook_payload
 from claude_mesh.storage import append_event, resolve_knowledge_path
 
@@ -74,10 +75,10 @@ def run(
     event = TaskEvent(
         from_=from_,
         timestamp=utc_now(),
-        id=task_id,
-        subject=subject,
-        status=status,
-        description=description,
+        id=sanitize_field(task_id),
+        subject=clean_summary(subject),
+        status=sanitize_field(status),
+        description=clean_body(description) if description else None,
         to=to,
         event_id=new_event_id(),
     )

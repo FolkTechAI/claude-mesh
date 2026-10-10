@@ -12,7 +12,7 @@ from claude_mesh.events import FileChangeEvent, header_block, render_event
 from claude_mesh.identity import new_event_id, utc_now
 from claude_mesh.mode import Mode, detect_mode
 from claude_mesh.pathval import PathValidationError, path_matches_any_glob, validate_relative_path
-from claude_mesh.sanitize import SensitiveDataFilter, sanitize_summary
+from claude_mesh.sanitize import clean_summary
 from claude_mesh.stdin_util import read_hook_payload
 from claude_mesh.storage import append_event, resolve_knowledge_path
 
@@ -83,14 +83,14 @@ def notify_change(
         participants = [from_]
 
     summary = summary_override or _git_diff_stat(path, cwd)
-    clean_summary = sanitize_summary(SensitiveDataFilter().redact(summary))
+    summary_text = clean_summary(summary)
 
     event = FileChangeEvent(
         from_=from_,
         timestamp=utc_now(),
         path=path,
         tool=tool,
-        summary=clean_summary or "(no git summary available)",
+        summary=summary_text or "(no git summary available)",
         event_id=new_event_id(),
     )
     rendered = render_event(event)
