@@ -15,7 +15,7 @@ from claude_mesh.config import MeshConfig
 from claude_mesh.events import ExperienceEvent, VerificationEvent
 from claude_mesh.identity import new_event_id, utc_now
 from claude_mesh.publish import PublishError, publish_event
-from claude_mesh.sanitize import SensitiveDataFilter, sanitize_body, sanitize_summary
+from claude_mesh.sanitize import SensitiveDataFilter, clean_body, sanitize_body, sanitize_summary
 from claude_mesh.supervisor.adapters import AdapterError, AgentResult, run_agent
 from claude_mesh.supervisor.config import (
     SupervisorConfig,
@@ -499,11 +499,9 @@ class Supervisor:
         artifact_hashes = ", ".join(
             f"{item.phase}:{item.sha256[:12]}" for item in self.runs.artifacts(run.id)
         )
-        evidence = sanitize_body(
-            SensitiveDataFilter().redact(
-                f"run={run.id}; artifacts={artifact_hashes}; "
-                f"evidence={verification.get('evidence', '')}"
-            )
+        evidence = clean_body(
+            f"run={run.id}; artifacts={artifact_hashes}; "
+            f"evidence={verification.get('evidence', '')}"
         )
         config = self._mesh_config(task, run)
         for target in self._receipt_targets(task):

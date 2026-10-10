@@ -9,11 +9,11 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from claude_mesh.events import TaskEvent, VerificationEvent
 from claude_mesh.config import NAME_PATTERN
+from claude_mesh.events import TaskEvent, VerificationEvent
 from claude_mesh.identity import new_event_id, utc_now
 from claude_mesh.publish import PublishError, load_current_config, publish_event
-from claude_mesh.sanitize import SensitiveDataFilter, sanitize_body, sanitize_summary
+from claude_mesh.sanitize import clean_body, clean_summary
 from claude_mesh.task_store import TaskConflict, TaskRecord, TaskStore, task_db_path
 
 TASK_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -25,10 +25,6 @@ def _lease_deadline(seconds: int) -> str:
     return (
         dt.datetime.now(dt.UTC) + dt.timedelta(seconds=seconds)
     ).isoformat(timespec="microseconds").replace("+00:00", "Z")
-
-
-def _clean(value: str) -> str:
-    return sanitize_body(SensitiveDataFilter().redact(value))
 
 
 def _task_event(record: TaskRecord, actor: str, to: str) -> TaskEvent:
@@ -104,8 +100,8 @@ def run(
                     raise TaskConflict("max attempts must be between 1 and 20")
                 record, created = store.create(
                     task_id=task_id,
-                    subject=sanitize_summary(_clean(subject)),
-                    description=_clean(description),
+                    subject=clean_summary(subject),
+                    description=clean_body(description),
                     created_by=config.mesh_peer,
                     assigned_to=to,
                     priority=priority,
@@ -114,7 +110,7 @@ def run(
                     idempotency_key=idempotency_key or task_id,
                     workspace=workspace,
                     capability=capability,
-                    acceptance_criteria=_clean(acceptance_criteria),
+                    acceptance_criteria=clean_body(acceptance_criteria),
                     approval_required=approval_required,
                 )
                 if created:
@@ -166,17 +162,17 @@ def run(
                 )
                 target = record.created_by
             elif action == "complete":
-                record = store.complete(task_id, config.mesh_peer, _clean(evidence or ""))
+                record = store.complete(task_id, config.mesh_peer, clean_body(evidence or ""))
                 target = record.created_by
             elif action == "fail":
-                record = store.fail(task_id, config.mesh_peer, _clean(error or ""))
+                record = store.fail(task_id, config.mesh_peer, clean_body(error or ""))
                 target = record.created_by
             elif action == "verify":
                 record = store.verify(
                     task_id,
                     config.mesh_peer,
                     verdict or "",
-                    _clean(evidence or ""),
+                    clean_body(evidence or ""),
                 )
                 target = record.assigned_to
                 verification = VerificationEvent(
@@ -185,7 +181,7 @@ def run(
                     id=f"verify-{task_id}-{record.attempt}",
                     task_id=task_id,
                     verdict=verdict or "",
-                    evidence=_clean(evidence or ""),
+                    evidence=clean_body(evidence or ""),
                     to=target,
                     event_id=new_event_id(),
                 )

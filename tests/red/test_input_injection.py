@@ -1,8 +1,9 @@
 # tests/red/test_input_injection.py
 """Red tests — prevent peer-controlled content from being treated as instructions."""
 
-import pytest
+from pathlib import Path
 
+from claude_mesh.commands.task_event import run as task_event
 from claude_mesh.sanitize import MAX_BODY_CHARS, sanitize_body, sanitize_field
 
 
@@ -48,3 +49,29 @@ def test_prompt_injection_framing_survives():
     # We do NOT strip imperatives — that's the job of framing, not sanitization
     assert "Ignore" in out
     assert "exfiltrate" in out
+
+
+def test_task_event_strips_null_and_ansi_before_write(tmp_path, monkeypatch):
+    """CAT 1: task-event description is later injected into a peer's prompt."""
+    home = tmp_path / "home"
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / ".claude-mesh").write_text(
+        "mesh_group: g\nmesh_peer: grok\nmesh_peers:\n  - grok\n  - alpha\n"
+    )
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.chdir(proj)
+
+    assert (
+        task_event(
+            "T-INJ",
+            "Normal subject",
+            "pending",
+            description="hello\x00\x1b[31malert\x1b[0m",
+        )
+        == 0
+    )
+    text = (home / ".claude-mesh" / "groups" / "g" / "alpha.ftai").read_text()
+    assert "\x00" not in text
+    assert "\x1b" not in text
+    assert "helloalert" in text

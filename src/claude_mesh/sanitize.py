@@ -65,3 +65,13 @@ class SensitiveDataFilter:
         for pattern, replacement in self._PATTERNS:
             out = pattern.sub(replacement, out)
         return out
+
+
+def clean_body(value: str) -> str:
+    """Redact secrets, then sanitize and cap a body/description field."""
+    return sanitize_body(SensitiveDataFilter().redact(value))
+
+
+def clean_summary(value: str) -> str:
+    """Redact secrets, then sanitize and cap a subject/summary field."""
+    return sanitize_summary(SensitiveDataFilter().redact(value))

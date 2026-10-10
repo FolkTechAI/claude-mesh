@@ -14,14 +14,10 @@ from claude_mesh.events import (
 )
 from claude_mesh.identity import new_event_id, utc_now
 from claude_mesh.publish import PublishError, load_current_config, publish_event
-from claude_mesh.sanitize import SensitiveDataFilter, sanitize_body, sanitize_summary
+from claude_mesh.sanitize import clean_body, clean_summary, sanitize_summary
 from claude_mesh.task_store import TaskStore, task_db_path
 
 SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
-
-
-def _clean(value: str) -> str:
-    return sanitize_body(SensitiveDataFilter().redact(value))
 
 
 def run(
@@ -63,8 +59,8 @@ def run(
                 id=record_id or "",
                 task_id=task_id or "",
                 verdict=verdict or "",
-                evidence=_clean(evidence or ""),
-                checks=_clean(checks) if checks else None,
+                evidence=clean_body(evidence or ""),
+                checks=clean_body(checks) if checks else None,
                 to=to,
                 event_id=event_id,
             )
@@ -89,11 +85,11 @@ def run(
                 timestamp=now,
                 id=record_id or "",
                 task_id=task_id or "",
-                outcome=_clean(outcome or ""),
-                lesson=_clean(lesson or ""),
-                evidence=_clean(evidence or ""),
+                outcome=clean_body(outcome or ""),
+                lesson=clean_body(lesson or ""),
+                evidence=clean_body(evidence or ""),
                 verified_by=sanitize_summary(verified_by or ""),
-                tags=[sanitize_summary(tag) for tag in (tags or [])],
+                tags=[clean_summary(tag) for tag in (tags or [])],
                 to=to,
                 event_id=event_id,
             )
@@ -105,11 +101,11 @@ def run(
             event = CapabilityEvent(
                 from_=config.mesh_peer,
                 timestamp=now,
-                name=sanitize_summary(name or ""),
-                description=_clean(description or ""),
+                name=clean_summary(name or ""),
+                description=clean_body(description or ""),
                 risk=risk or "",
                 status=status or "",
-                constraints=_clean(constraints) if constraints else None,
+                constraints=clean_body(constraints) if constraints else None,
                 event_id=event_id,
             )
         elif kind == "heartbeat":

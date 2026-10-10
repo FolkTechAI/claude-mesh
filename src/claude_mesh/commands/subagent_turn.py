@@ -7,7 +7,7 @@ from typing import Any
 from claude_mesh.events import MessageEvent, header_block, render_event
 from claude_mesh.identity import new_event_id, utc_now
 from claude_mesh.mode import Mode, detect_mode
-from claude_mesh.sanitize import sanitize_summary
+from claude_mesh.sanitize import clean_summary
 from claude_mesh.stdin_util import read_hook_payload
 from claude_mesh.storage import append_event, resolve_knowledge_path
 
@@ -33,7 +33,7 @@ def run() -> int:
     from_ = str(payload.get("teammate_name") or payload.get("agent_type") or "unknown")
     path = resolve_knowledge_path(mode, payload, None, home)
 
-    clean = sanitize_summary(msg)
+    clean = clean_summary(msg)
     event = MessageEvent(
         from_=from_,
         timestamp=utc_now(),

@@ -11,7 +11,7 @@ import uuid
 from dataclasses import asdict
 from pathlib import Path
 
-from claude_mesh.sanitize import SensitiveDataFilter, sanitize_body, sanitize_summary
+from claude_mesh.sanitize import clean_body, clean_summary
 from claude_mesh.supervisor.config import (
     SupervisorConfigError,
     default_config_path,
@@ -140,11 +140,10 @@ def run(
                 generated_id = task_id or f"TASK-{uuid.uuid4()}"
                 if not SAFE_ID.fullmatch(generated_id):
                     raise SupervisorError("task ID contains unsupported characters")
-                clean = SensitiveDataFilter()
                 record, _ = tasks.create(
                     task_id=generated_id,
-                    subject=sanitize_summary(clean.redact(subject)),
-                    description=sanitize_body(clean.redact(description)),
+                    subject=clean_summary(subject),
+                    description=clean_body(description),
                     created_by=config.operator,
                     assigned_to=eligible[0].name,
                     priority="normal",
@@ -153,9 +152,7 @@ def run(
                     idempotency_key=idempotency_key or generated_id,
                     workspace=str(workspace_path),
                     capability=capability,
-                    acceptance_criteria=sanitize_body(
-                        clean.redact(acceptance_criteria)
-                    ),
+                    acceptance_criteria=clean_body(acceptance_criteria),
                     approval_required=approval_required,
                 )
                 result = supervisor.run_task(record.id)
