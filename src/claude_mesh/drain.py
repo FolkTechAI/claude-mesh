@@ -46,6 +46,33 @@ def pending_marker_path(marker_path: Path) -> Path:
     return marker_path.with_suffix(marker_path.suffix + ".pending")
 
 
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write `text` via a same-directory replace so readers never see a torn file."""
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=path.parent, delete=False
+    )
+    try:
+        tmp.write(text)
+        tmp.close()
+        os.replace(tmp.name, path)
+    except BaseException:
+        try:
+            tmp.close()
+        except OSError:
+            pass
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+        raise
+
+
+def write_pending_cursor(marker_path: Path, cursor: int) -> None:
+    """Persist the byte offset this drain covered, for the following mark-read."""
+    _atomic_write_text(pending_marker_path(marker_path), f"offset:{cursor}\n")
+
+
 def drain_unread_with_high_water(
     knowledge_file: Path, marker_path: Path, participant: str | None = None
 ) -> tuple[str, str | None]:
@@ -176,10 +203,4 @@ def mark_read(marker_path: Path, now: str | None = None) -> None:
         elif not existing.startswith("offset:") and not now.startswith("offset:"):
             if existing > now:
                 return
-    marker_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    tmp = tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=marker_path.parent, delete=False
-    )
-    tmp.write(now + "\n")
-    tmp.close()
-    os.replace(tmp.name, marker_path)
+    _atomic_write_text(marker_path, now + "\n")
