@@ -142,6 +142,42 @@ def test_marker_never_moves_backwards(tmp_path):
     assert marker.read_text().strip() == "2026-01-01T00:00:20Z"
 
 
+def test_pending_write_failure_does_not_emit_or_consume(tmp_path, monkeypatch, capsys):
+    """If the drain cursor cannot be recorded, emit nothing.
+
+    Otherwise the hook sees stdout, calls mark-read, and mark-read falls back
+    to current inbox size — the same silent-loss class as stamping wall-clock now.
+    """
+    home = tmp_path / "home"
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / ".claude-mesh").write_text(
+        "mesh_group: g\nmesh_peer: grok\nmesh_peers:\n  - grok\n  - x\n"
+    )
+    group = home / ".claude-mesh" / "groups" / "g"
+    group.mkdir(parents=True)
+    log = group / "grok.ftai"
+    log.write_text(HEADER + "@note\nfrom: x\ntimestamp: 2026-01-01T00:00:10Z\ncontent: KEEP-ME\n\n")
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.chdir(proj)
+
+    def boom(_marker, _cursor):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(
+        "claude_mesh.commands.drain.write_pending_cursor", boom
+    )
+
+    rc = drain_run("prompt")
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert captured.out == ""
+    assert "cannot record read cursor" in captured.err
+    assert not pending_marker_path(read_marker_path(log)).exists()
+    assert "KEEP-ME" in drain_unread(log, read_marker_path(log))
+
+
 def test_offset_marker_delivers_later_event_with_identical_timestamp(tmp_path):
     timestamp = "2026-01-01T00:00:10Z"
     log = _log(tmp_path, (timestamp, "FIRST"))

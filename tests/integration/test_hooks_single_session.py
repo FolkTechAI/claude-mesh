@@ -48,6 +48,36 @@ def test_user_prompt_submit_injects_unread(tmp_path, monkeypatch):
     assert "mesh_context" in r.stdout or "hello" in r.stdout
 
 
+def test_user_prompt_submit_malformed_inbox_does_not_inject(tmp_path, monkeypatch):
+    """Corrupt inbox must not crash the hook or inject, and must leave an error log."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / ".claude-mesh").write_text(
+        "mesh_group: a-b\nmesh_peer: a\n"
+    )
+    inbox = tmp_path / ".claude-mesh" / "groups" / "a-b" / "a.ftai"
+    inbox.parent.mkdir(parents=True)
+    inbox.write_text("this is not ftai\n")
+    hook = Path(__file__).parent.parent.parent / "hooks" / "user_prompt_submit.sh"
+    r = subprocess.run(
+        ["bash", str(hook)],
+        cwd=proj,
+        capture_output=True, text=True, check=False,
+        input=json.dumps({
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "real user prompt",
+            "cwd": str(proj),
+        }),
+    )
+    assert r.returncode == 0
+    assert "mesh_context" not in r.stdout
+    errors = (tmp_path / ".claude-mesh" / "errors.log").read_text()
+    assert "claude-mesh drain:" in errors
+    marker = inbox.with_suffix(inbox.suffix + ".read")
+    assert not marker.exists()
+
+
 def test_post_tool_use_edit_matches_cross_cutting(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     proj = tmp_path / "proj"

@@ -6,7 +6,9 @@ source "${SCRIPT_DIR}/_common.sh"
 
 PAYLOAD="$(cat)"
 
-MESH_CTX="$(echo "${PAYLOAD}" | PYTHONPATH="${_PLUGIN_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" "${_PY}" -m claude_mesh drain --format=prompt 2>/dev/null || true)"
+# Drain stderr goes to the mesh error log, not /dev/null: a malformed inbox
+# must leave a trail. Empty stdout still means "do not inject / do not mark-read".
+MESH_CTX="$(echo "${PAYLOAD}" | PYTHONPATH="${_PLUGIN_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" "${_PY}" -m claude_mesh drain --format=prompt 2>>"${_log_dir}" || true)"
 
 if [ -n "${MESH_CTX}" ]; then
     MESH_CTX="${MESH_CTX}" PAYLOAD="${PAYLOAD}" "${_PY}" - <<'PYEOF'
