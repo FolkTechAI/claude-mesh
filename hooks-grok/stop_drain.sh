@@ -21,7 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=_common.sh
 source "${SCRIPT_DIR}/_common.sh"
 
-PAYLOAD="$(cat)"
+PAYLOAD="$(read_hook_stdin)"
 
 if [ "${CLAUDE_MESH_GROK_STOP_DRAIN:-1}" = "0" ]; then
     exit 0

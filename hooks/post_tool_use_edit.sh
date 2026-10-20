@@ -4,7 +4,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=_common.sh
 source "${SCRIPT_DIR}/_common.sh"
 
-PAYLOAD="$(cat)"
+PAYLOAD="$(read_hook_stdin)"
 
 # Extract tool + file_path, making the path project-relative when possible.
 # We use Python's os.path.realpath on both sides so symlink-resolved paths

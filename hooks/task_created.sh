@@ -4,7 +4,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=_common.sh
 source "${SCRIPT_DIR}/_common.sh"
 
-PAYLOAD="$(cat)"
+PAYLOAD="$(read_hook_stdin)"
 INFO="$(PAYLOAD="${PAYLOAD}" "${_PY}" - <<'PYEOF'
 import json, os
 try:

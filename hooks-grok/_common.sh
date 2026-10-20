@@ -26,6 +26,19 @@ _py() {
 }
 _PY="$(_py)"
 
+# Consume the hook JSON envelope with the same bound the Python CLI uses.
+# Bare `cat` hangs the agent turn when stdin is an inherited pipe that never
+# reaches EOF, and will buffer an unbounded write.
+read_hook_stdin() {
+    if [ -z "${_PY}" ]; then
+        log_error "no python3 on PATH"
+        return 0
+    fi
+    PYTHONPATH="${_PLUGIN_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" \
+        "${_PY}" -m claude_mesh.stdin_util \
+        2>>"${_log_dir}" || true
+}
+
 # Run the mesh CLI. Always with stdin closed: the hook already consumed the
 # envelope, and an inherited never-EOF pipe would otherwise stall the turn.
 run_mesh() {

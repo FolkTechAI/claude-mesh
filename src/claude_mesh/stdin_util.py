@@ -1,13 +1,15 @@
-# src/claude_mesh/stdin_util.py
 """Non-blocking stdin payload reader.
 
 Hook wrappers pipe a JSON event envelope on stdin. The naive
-`sys.stdin.read()` blocks forever when stdin is an inherited pipe that
-never reaches EOF (backgrounded shells, some harness spawn paths), which
-hangs the CLI and — through it — the agent turn.
+`sys.stdin.read()` — and the shell equivalent `PAYLOAD="$(cat)"` — block
+forever when stdin is an inherited pipe that never reaches EOF
+(backgrounded shells, some harness spawn paths), which hangs the CLI and
+— through it — the agent turn.
 
 Every command reads its payload through `read_hook_payload`, which is
-bounded by a wall-clock deadline and always returns.
+bounded by a wall-clock deadline and always returns. Hook wrappers call
+this module as `python -m claude_mesh.stdin_util` so the bash layer uses
+the same bound instead of unbounded `cat`.
 """
 
 from __future__ import annotations
@@ -23,6 +25,10 @@ from typing import Any
 # Hook envelopes are small; anything larger is truncated rather than buffered.
 MAX_PAYLOAD_BYTES = 1024 * 1024
 DEFAULT_TIMEOUT_S = 0.25
+# Hooks are the first reader of Claude/Grok's envelope. Give the writer a
+# little more than the CLI default: the CLI usually reads from a pipe the
+# hook has already filled and closed.
+HOOK_STDIN_TIMEOUT_S = 1.0
 
 
 def read_stdin_bounded(timeout: float = DEFAULT_TIMEOUT_S) -> str:
@@ -70,7 +76,8 @@ def read_stdin_bounded(timeout: float = DEFAULT_TIMEOUT_S) -> str:
 
     if not chunks:
         return ""
-    return b"".join(chunks).decode("utf-8", errors="replace")
+    # Last os.read() can overshoot the cap by up to the chunk size.
+    return b"".join(chunks)[:MAX_PAYLOAD_BYTES].decode("utf-8", errors="replace")
 
 
 def read_hook_payload(timeout: float = DEFAULT_TIMEOUT_S) -> dict[str, Any]:
@@ -83,3 +90,13 @@ def read_hook_payload(timeout: float = DEFAULT_TIMEOUT_S) -> dict[str, Any]:
     except (json.JSONDecodeError, ValueError):
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def main() -> int:
+    """Emit a bounded stdin envelope. Used by hook wrappers instead of `cat`."""
+    sys.stdout.write(read_stdin_bounded(HOOK_STDIN_TIMEOUT_S))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -3,6 +3,6 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=_common.sh
 source "${SCRIPT_DIR}/_common.sh"
-PAYLOAD="$(cat)"
+PAYLOAD="$(read_hook_stdin)"
 echo "${PAYLOAD}" | PYTHONPATH="${_PLUGIN_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" "${_PY}" -m claude_mesh subagent-turn 2>>"${_log_dir}" || true
 exit 0
