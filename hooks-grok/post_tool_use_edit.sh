@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=_common.sh
 source "${SCRIPT_DIR}/_common.sh"
 
-PAYLOAD="$(cat)"
+PAYLOAD="$(read_hook_stdin)"
 
 # Grok's envelope is camelCase and its edit tools carry the path under
 # assorted keys depending on the tool, so probe all the plausible ones.
