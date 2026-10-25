@@ -19,20 +19,22 @@ def test_session_start_hook_runs(tmp_path, monkeypatch):
     assert r.returncode == 0
 
 
-def test_user_prompt_submit_injects_unread(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    # Setup project with mesh and pre-populate inbox
+def _standalone_inbox(tmp_path: Path, body: str = "hello") -> tuple[Path, Path]:
     proj = tmp_path / "proj"
     proj.mkdir()
-    (proj / ".claude-mesh").write_text(
-        "mesh_group: a-b\nmesh_peer: a\n"
-    )
+    (proj / ".claude-mesh").write_text("mesh_group: a-b\nmesh_peer: a\n")
     inbox = tmp_path / ".claude-mesh" / "groups" / "a-b" / "a.ftai"
     inbox.parent.mkdir(parents=True)
     inbox.write_text(
         "@ftai v2.0\n\n"
-        "@message\nfrom: b\ntimestamp: 2026-04-17T10:00Z\nbody: hello\n\n"
+        f"@message\nfrom: b\ntimestamp: 2026-04-17T10:00Z\nbody: {body}\n\n"
     )
+    return proj, inbox
+
+
+def test_user_prompt_submit_injects_unread(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj, inbox = _standalone_inbox(tmp_path)
     hook = Path(__file__).parent.parent.parent / "hooks" / "user_prompt_submit.sh"
     r = subprocess.run(
         ["bash", str(hook)],
@@ -45,7 +47,37 @@ def test_user_prompt_submit_injects_unread(tmp_path, monkeypatch):
         }),
     )
     assert r.returncode == 0
+    assert "modified_prompt" in r.stdout
     assert "mesh_context" in r.stdout or "hello" in r.stdout
+    marker = inbox.with_suffix(inbox.suffix + ".read")
+    assert marker.exists(), "successful injection must consume the drained mail"
+
+
+def test_user_prompt_submit_keeps_mail_when_prompt_merge_fails(tmp_path, monkeypatch):
+    """Drain succeeded but the hook could not emit injection JSON.
+
+    The old wrapper swallowed the merge exception and still called mark-read,
+    so the mail was consumed without ever reaching the model.
+    """
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj, inbox = _standalone_inbox(tmp_path, body="KEEP-ME")
+    hook = Path(__file__).parent.parent.parent / "hooks" / "user_prompt_submit.sh"
+    r = subprocess.run(
+        ["bash", str(hook)],
+        cwd=proj,
+        capture_output=True, text=True, check=False,
+        # Truncated envelope: drain still runs (standalone via cwd config),
+        # json.loads of PAYLOAD fails, merge must not mark-read.
+        input='{"hook_event_name": "UserPromptSubmit", "prompt": "real user prompt"',
+    )
+    assert r.returncode == 0
+    assert "modified_prompt" not in r.stdout
+    assert "mesh_context" not in r.stdout
+    marker = inbox.with_suffix(inbox.suffix + ".read")
+    assert not marker.exists()
+    errors = (tmp_path / ".claude-mesh" / "errors.log").read_text()
+    assert "prompt merge failed" in errors
+    assert "KEEP-ME" in inbox.read_text()
 
 
 def test_post_tool_use_edit_matches_cross_cutting(tmp_path, monkeypatch):

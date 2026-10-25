@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- UserPromptSubmit / Grok Stop hooks no longer mark mail read when the
+  injection JSON cannot be emitted. A failed prompt merge used to consume
+  the drain with nothing reaching the model.
+
 ## [0.3.0] — 2026-07-31
 
 ### Added
