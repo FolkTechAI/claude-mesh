@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 STOP = Path(__file__).resolve().parents[2] / "hooks-grok" / "stop_drain.sh"
+_BASH = shutil.which("bash")
 
 
 @pytest.fixture
@@ -61,8 +62,9 @@ def _run(
         "cwd": str(proj),
         "workspaceRoot": str(proj),
     }
-    return subprocess.run(
-        ["bash", str(STOP)],
+    assert _BASH is not None
+    return subprocess.run(  # noqa: S603 - resolved bash path, fixed hook argv
+        [_BASH, str(STOP)],
         input=json.dumps(body),
         capture_output=True,
         text=True,
